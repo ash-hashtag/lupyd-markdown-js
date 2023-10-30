@@ -1,0 +1,36 @@
+Arguments: 
+  /home/ash/.nvm/versions/node/v18.17.0/bin/node /usr/bin/yarn init
+
+PATH: 
+  /home/ash/.nvm/versions/node/v18.17.0/bin:/usr/local/sbin:/usr/local/bin:/usr/bin:/opt/cuda/bin:/opt/cuda/nsight_compute:/opt/cuda/nsight_systems/bin:/usr/lib/jvm/default/bin:/usr/bin/site_perl:/usr/bin/vendor_perl:/usr/bin/core_perl:/usr/lib/rustup/bin:/home/ash/.puro/bin:/home/ash/.puro/shared/pub_cache/bin:/home/ash/.puro/envs/default/flutter/bin:/opt/cuda/bin:/opt/cuda/nsight_compute:/opt/cuda/nsight_systems/bin:/usr/lib/rustup/bin:/home/ash/Development/flutter/bin:/home/ash/.surrealdb:/usr/lib/rustup/bin:/home/ash/.yarn/bin:/usr/share/scripts:/home/ash/.cargo/bin:/home/ash/.pub-cache/bin:/home/ash/.puro/bin:/home/ash/.puro/shared/pub_cache/bin:/home/ash/.puro/envs/default/flutter/bin
+
+Yarn version: 
+  1.22.19
+
+Node version: 
+  18.17.0
+
+Platform: 
+  linux x64
+
+Trace: 
+  Error: canceled
+      at Interface.<anonymous> (/usr/lib/node_modules/yarn/lib/cli.js:137150:13)
+      at Interface.emit (node:events:514:28)
+      at [_ttyWrite] [as _ttyWrite] (node:internal/readline/interface:1131:18)
+      at ReadStream.onkeypress (node:internal/readline/interface:270:20)
+      at ReadStream.emit (node:events:514:28)
+      at emitKeys (node:internal/readline/utils:357:14)
+      at emitKeys.next (<anonymous>)
+      at ReadStream.onData (node:internal/readline/emitKeypressEvents:64:36)
+      at ReadStream.emit (node:events:514:28)
+      at addChunk (node:internal/streams/readable:324:12)
+
+npm manifest: 
+  No manifest
+
+yarn manifest: 
+  No manifest
+
+Lockfile: 
+  No lockfile
