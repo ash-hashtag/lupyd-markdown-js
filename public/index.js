@@ -355,10 +355,29 @@ class HyperLinkElement extends HTMLElement {
       let matchArray;
       while ((matchArray = rawHyperLinkRegex.exec(innerText)) !== null) {
         if (matchArray.length === 3) {
-          const a = document.createElement("a");
-          a.innerText = matchArray[1];
-          a.href = matchArray[2];
-          this.replaceChildren(a);
+          const url = matchArray[2];
+          const tag = matchArray[1];
+          let child;
+          switch (tag) {
+            case "image":
+              const img = document.createElement("img");
+              img.src = url;
+              img.alt = tag;
+              child = img;
+              break;
+            case "video":
+              const vid = document.createElement("video");
+              vid.controls = true;
+              vid.src = url;
+              child = vid;
+              break;
+            default:
+              const a = document.createElement("a");
+              a.innerText = tag;
+              a.href = url;
+              child = a;
+          }
+          this.replaceChildren(child);
         }
       }
     }
