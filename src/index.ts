@@ -1,19 +1,20 @@
-const parseTextToHtmlElement = (text: string): HTMLElement => {
-  const patternMatches = _parseText(new PatternMatchPart(text), defaultMatchers())
-  const p = document.createElement("p")
-  p.innerText = patternMatches.toString() + '\n'
-  // const elem = convertPatternMatchesToHtmlElements(patternMatches, defaultHTMLConverters())
-  const elem = convertPatternMatchesToHtmlElementsContainers(patternMatches, defaultHTMLContainerConverters())
-  elem.insertAdjacentElement("afterbegin", p)
-  return elem
-}
-
 const inputTextArea = document.getElementById("input-text")! as HTMLTextAreaElement
 const outputElement = document.getElementById("output-text")! as HTMLElement
 inputTextArea.addEventListener("input", _ => {
   const text = inputTextArea.value
   outputElement.replaceChildren(parseTextToHtmlElement(text))
 })
+
+
+
+function parseTextToHtmlElement (text: string): HTMLElement  {
+  const patternMatches = _parseText(new PatternMatchPart(text), defaultMatchers())
+  const p = document.createElement("p")
+  p.innerText = patternMatches.toString() + '\n'
+  const elem = convertPatternMatchesToHtmlElementsContainers(patternMatches, defaultHTMLContainerConverters())
+  elem.insertAdjacentElement("afterbegin", p)
+  return elem
+}
 
 
 function areListsEqual<T>(a: T[], b: T[]): boolean {
@@ -53,7 +54,6 @@ class Match {
   result() { return this.inputText.substring(this.start, this.end) }
 }
 
-// const matcher = (s: string): Match[] => { return [] }
 
 class PatternMatcher {
   matcher: (_: string) => Match[]
@@ -91,6 +91,26 @@ class RegexPatternMatcher extends PatternMatcher {
     this.regex = regex
   }
 }
+class PatternMatchPart {
+  text: string
+  matchTypes: string[]
+
+  constructor(text: string, matchTypes: string[] = []) {
+    this.text = text
+    this.matchTypes = matchTypes
+  }
+
+  toString() {
+    return `{ text: ${this.text}, type: ${this.matchTypes} }`
+  }
+
+  isEqual(other: PatternMatchPart) {
+    if (other === this) {
+      return true
+    }
+    return other.text === this.text && areListsEqual(other.matchTypes, this.matchTypes)
+  }
+}
 
 const tripleDelimiterBoth = (_: string) => _.substring(3, _.length - 3);
 const singleDelimiter = (_: string) => _.substring(1);
@@ -112,26 +132,6 @@ function defaultMatchers() {
   ]
 }
 
-class PatternMatchPart {
-  text: string
-  matchTypes: string[]
-
-  constructor(text: string, matchTypes: string[] = []) {
-    this.text = text
-    this.matchTypes = matchTypes
-  }
-
-  toString() {
-    return `{ text: ${this.text}, type: ${this.matchTypes} }`
-  }
-
-  isEqual(other: PatternMatchPart) {
-    if (other === this) {
-      return true
-    }
-    return other.text === this.text && areListsEqual(other.matchTypes, this.matchTypes)
-  }
-}
 
 interface Tuple<U, V> {
   a: U,
@@ -187,15 +187,6 @@ function _parseText(inputPart: PatternMatchPart, patternMatchers: PatternMatcher
   return parts
 }
 
-class PatternToHtmlElementConverter {
-  matchType: string
-  converter: (_: string) => HTMLElement
-
-  constructor(matchType: string, converter: (_: string) => HTMLElement) {
-    this.matchType = matchType
-    this.converter = converter
-  }
-}
 
 class PatternToHtmlContainer {
   matchType: string
@@ -216,68 +207,6 @@ class PatternToHtmlContainer {
   }
 }
 
-function defaultHTMLConverters() {
-  const boldConverter = new PatternToHtmlElementConverter('bold', (_) => {
-    const b = document.createElement("b")
-    b.innerText = _
-    return b
-  })
-  const quoteConverter = new PatternToHtmlElementConverter('bold', (_) => {
-    const b = document.createElement("b")
-    b.innerText = _
-    b.style.color = "pink"
-    return b
-  })
-  const hyperLinkConverter = new PatternToHtmlElementConverter('hyperlink', (_) => {
-    const div = document.createElement("div")
-    div.innerText = _
-    div.style.color = "blue"
-    div.style.display = "inline"
-    return div
-  })
-  const codeConverter = new PatternToHtmlElementConverter('code', (_) => {
-    const div = document.createElement("div")
-    div.innerText = _
-    div.style.fontFamily = "'Courier New', monospace"
-    return div
-  })
-  const usernameConverter = new PatternToHtmlElementConverter('username', (_) => {
-    const b = document.createElement("b")
-    b.innerText = _
-    b.style.color = "grey"
-    return b
-  })
-
-
-  const headerConverter = new PatternToHtmlElementConverter('header', (_) => {
-    const header = document.createElement("h1")
-    header.style.display = "inline"
-    header.innerText = _
-    return header
-  })
-  const underlineConverter = new PatternToHtmlElementConverter('underline', (_) => {
-    const u = document.createElement("u")
-    u.innerText = _
-    return u
-  })
-
-  const hashtagConverter = new PatternToHtmlElementConverter('hashtag', (_) => {
-    const hashtag = document.createElement("b")
-    hashtag.style.color = "blue"
-    hashtag.innerText = _
-    return hashtag
-  })
-
-  const italicConverter = new PatternToHtmlElementConverter('italic', (_) => {
-    const italic = document.createElement("span")
-    italic.style.fontStyle = "italic"
-    italic.innerText = _
-    return italic
-  })
-
-
-  return [boldConverter, headerConverter, hashtagConverter, italicConverter, hyperLinkConverter, codeConverter, usernameConverter, quoteConverter, underlineConverter]
-}
 
 function defaultHTMLContainerConverters() {
   const underlineConverter = new PatternToHtmlContainer('underline', () => {
@@ -290,12 +219,7 @@ function defaultHTMLContainerConverters() {
     b.style.color = "pink"
     return b
   })
-  const hyperLinkConverter = new PatternToHtmlContainer('hyperlink', () => {
-    // const div = document.createElement("div")
-    // div.style.color = "blue"
-    // div.style.display = "inline"
-    return new HyperLinkElement()
-  })
+
   const codeConverter = new PatternToHtmlContainer('code', () => {
     const div = document.createElement("div")
     div.style.fontFamily = "'Courier New', monospace"
@@ -333,31 +257,9 @@ function defaultHTMLContainerConverters() {
     return a
   })
 
+  const hyperLinkConverter = new PatternToHtmlContainer('hyperlink', () => new HyperLinkElement())
+
   return [boldConverter, headerConverter, hashtagConverter, italicConverter, usernameConverter, codeConverter, hyperLinkConverter, quoteConverter, underlineConverter]
-}
-
-function convertPatternMatchesToHtmlElements(matches: PatternMatchPart[], converters: PatternToHtmlElementConverter[]): HTMLElement {
-  const div = document.createElement("div")
-  for (const match of matches) {
-    if (match.matchTypes.length === 0) {
-      const p = document.createElement('span')
-      p.innerText = match.text
-      div.appendChild(p)
-    } else {
-
-      for (const matchType of match.matchTypes) {
-        const converter = converters.find(_ => _.matchType === matchType)
-        if (converter) {
-          div.appendChild(converter.converter(match.text))
-        } else {
-          const p = document.createElement('span')
-          p.innerText = match.text
-          div.appendChild(p)
-        }
-      }
-    }
-  }
-  return div
 }
 
 function convertPatternMatchesToHtmlElementsContainers(matches: PatternMatchPart[], converters: PatternToHtmlContainer[]): HTMLElement {
@@ -393,16 +295,11 @@ function convertPatternMatchesToHtmlElementsContainers(matches: PatternMatchPart
 }
 
 
-class HyperLinkElement extends HTMLElement {
-  constructor() {
-    super()
-  }
-
+export class HyperLinkElement extends HTMLElement {
 
   connectedCallback() {
     this.render()
   }
-
 
   render() {
     const innerText = this.innerText
