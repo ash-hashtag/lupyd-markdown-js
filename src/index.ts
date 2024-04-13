@@ -1,40 +1,11 @@
-const inputTextArea = document.getElementById("input-text")! as HTMLTextAreaElement
-const outputElement = document.getElementById("output-text")! as HTMLElement
-inputTextArea.addEventListener("input", _ => {
-  const text = inputTextArea.value
-  outputElement.replaceChildren(parseTextToHtmlElement(text))
-})
-
-
-
-function parseTextToHtmlElement (text: string): HTMLElement  {
-  const patternMatches = _parseText(new PatternMatchPart(text), defaultMatchers())
-  const p = document.createElement("p")
-  p.innerText = patternMatches.toString() + '\n'
-  const elem = convertPatternMatchesToHtmlElementsContainers(patternMatches, defaultHTMLContainerConverters())
-  elem.insertAdjacentElement("afterbegin", p)
-  return elem
-}
-
-
-function areListsEqual<T>(a: T[], b: T[]): boolean {
-  if (a === b) return true
-  if (a.length !== b.length) return false
-  for (let i = 0; i < a.length; i++) {
-    if (a[i] !== b[i]) {
-      return false
-    }
-  }
-  return true
-}
-
+import { Element, ElementType } from "./lupydMarkdown"
 
 
 const rawBoldRegex = /(?<!\\)\*\*\*(.*?)(?<!\\)\*\*\*/gm
 const rawItalicRegex = /(?<!\\)\/\/\/(.*?)(?<!\\)\/\/\//gm
 const rawUnderlineRegex = /(?<!\\)___(.*?)(?<!\\)___/gm
 const rawHeaderRegex = /(?<!\\)###(.*?)(?<!\\)###/gm
-const rawCodeRegex = /(?<!\\)"""(.*?)(?<!\\)"""/gm
+const rawCodeRegex = /(?<!\\)```(.*?)(?<!\\)```/gm
 const rawHashtagRegex = /(?<!\\)#\w+/gm
 const rawMentionRegex = /(?<!\\)@\w+/gm
 const rawQuoteRegex = /^>\|\s.*$/gm
@@ -58,11 +29,11 @@ class Match {
 class PatternMatcher {
   matcher: (_: string) => Match[]
   delimiter: (_: string) => string
-  matchType: string
+  matchType: ElementType
   lookInwards: boolean
   singleType: boolean
 
-  constructor(matcher: (_: string) => Match[], delimiter: (_: string) => string, matchType: string, lookInwards: boolean, singleType: boolean) {
+  constructor(matcher: (_: string) => Match[], delimiter: (_: string) => string, matchType: ElementType, lookInwards: boolean, singleType: boolean) {
     this.matchType = matchType
     this.matcher = matcher
     this.delimiter = delimiter
@@ -76,7 +47,7 @@ class PatternMatcher {
 class RegexPatternMatcher extends PatternMatcher {
   regex: RegExp
 
-  constructor(regex: RegExp, matchType: string, delimiter: (_: string) => string, lookInwards: boolean, singleType: boolean) {
+  constructor(regex: RegExp, matchType: ElementType, delimiter: (_: string) => string, lookInwards: boolean, singleType: boolean) {
     const matcher = (_: string) => {
       let matchArray: RegExpExecArray | null
       let matches: Match[] = []
@@ -91,41 +62,20 @@ class RegexPatternMatcher extends PatternMatcher {
     this.regex = regex
   }
 }
-class PatternMatchPart {
-  text: string
-  matchTypes: string[]
-
-  constructor(text: string, matchTypes: string[] = []) {
-    this.text = text
-    this.matchTypes = matchTypes
-  }
-
-  toString() {
-    return `{ text: ${this.text}, type: ${this.matchTypes} }`
-  }
-
-  isEqual(other: PatternMatchPart) {
-    if (other === this) {
-      return true
-    }
-    return other.text === this.text && areListsEqual(other.matchTypes, this.matchTypes)
-  }
-}
-
 const tripleDelimiterBoth = (_: string) => _.substring(3, _.length - 3);
 const singleDelimiter = (_: string) => _.substring(1);
 const noDelimiter = (_: string) => _
 
 function defaultMatchers() {
-  const boldMatcher = new RegexPatternMatcher(rawBoldRegex, "bold", tripleDelimiterBoth, true, false)
-  const headerMatcher = new RegexPatternMatcher(rawHeaderRegex, "header", tripleDelimiterBoth, true, false)
-  const codeMatcher = new RegexPatternMatcher(rawCodeRegex, "code", tripleDelimiterBoth, true, false)
-  const italicMatcher = new RegexPatternMatcher(rawItalicRegex, "italic", tripleDelimiterBoth, true, false)
-  const underlineMatcher = new RegexPatternMatcher(rawUnderlineRegex, "underline", tripleDelimiterBoth, true, false)
-  const hashtagMatcher = new RegexPatternMatcher(rawHashtagRegex, "hashtag", singleDelimiter, false, true)
-  const usernameMatcher = new RegexPatternMatcher(rawMentionRegex, "username", singleDelimiter, false, true)
-  const hyperLinkMatcher = new RegexPatternMatcher(rawHyperLinkRegex, "hyperlink", noDelimiter, false, true)
-  const quoteMatcher = new RegexPatternMatcher(rawQuoteRegex, "quote", tripleDelimiterBoth, true, true)
+  const boldMatcher = new RegexPatternMatcher(rawBoldRegex, ElementType.Bold, tripleDelimiterBoth, true, false)
+  const headerMatcher = new RegexPatternMatcher(rawHeaderRegex, ElementType.Header, tripleDelimiterBoth, true, false)
+  const codeMatcher = new RegexPatternMatcher(rawCodeRegex, ElementType.Code, tripleDelimiterBoth, true, false)
+  const italicMatcher = new RegexPatternMatcher(rawItalicRegex, ElementType.Italic, tripleDelimiterBoth, true, false)
+  const underlineMatcher = new RegexPatternMatcher(rawUnderlineRegex, ElementType.UnderLine, tripleDelimiterBoth, true, false)
+  const hashtagMatcher = new RegexPatternMatcher(rawHashtagRegex, ElementType.HashTag, singleDelimiter, false, true)
+  const usernameMatcher = new RegexPatternMatcher(rawMentionRegex, ElementType.Mention, singleDelimiter, false, true)
+  const hyperLinkMatcher = new RegexPatternMatcher(rawHyperLinkRegex, ElementType.HyperLink, noDelimiter, false, true)
+  const quoteMatcher = new RegexPatternMatcher(rawQuoteRegex, ElementType.Quote, tripleDelimiterBoth, true, true)
   return [
     boldMatcher, headerMatcher, hashtagMatcher, italicMatcher, usernameMatcher, hyperLinkMatcher, quoteMatcher, underlineMatcher,
     codeMatcher,
@@ -138,9 +88,12 @@ interface Tuple<U, V> {
   b: V
 }
 
-function _parseText(inputPart: PatternMatchPart, patternMatchers: PatternMatcher[]) {
+
+function _parseText2(inputPart: Element, patternMatchers: PatternMatcher[]): Element[] {
+  const elements: Element[] = []
+
   const inputText = inputPart.text
-  const parts: PatternMatchPart[] = []
+
   if (patternMatchers.length === 0) {
     return [inputPart]
   }
@@ -152,7 +105,7 @@ function _parseText(inputPart: PatternMatchPart, patternMatchers: PatternMatcher
   patternMatches.sort((a, b) => a.a.start - b.a.start)
 
   let current = 0
-  let currentTypes = [...inputPart.matchTypes]
+  let currentTypes = inputPart.elementType
 
   for (const match of patternMatches) {
     if (current > match.a.start) {
@@ -160,149 +113,67 @@ function _parseText(inputPart: PatternMatchPart, patternMatchers: PatternMatcher
     }
 
     if (current < match.a.start) {
-      const part = new PatternMatchPart(inputText.substring(current, match.a.start), currentTypes)
-      const result = _parseText(part, patternMatchers)
-      parts.push(...result)
+      const result = _parseText2({
+        text: inputText.substring(current, match.a.start),
+        elementType: currentTypes,
+      }, patternMatchers)
+      elements.push(...result)
     }
 
-    const matchTypes = match.b.singleType ? [match.b.matchType] : [...currentTypes, match.b.matchType]
-    const part = new PatternMatchPart(match.b.delimiter(inputText.substring(match.a.start, match.a.end)), matchTypes)
+    const matchTypes: ElementType = match.b.singleType ? match.b.matchType : currentTypes | match.b.matchType
+    const element: Element = {
+      text: match.b.delimiter(inputText.substring(match.a.start, match.a.end)),
+      elementType: matchTypes,
+    }
 
     if (match.b.lookInwards) {
-      const result = _parseText(part, patternMatchers)
-      parts.push(...result)
+      const result = _parseText2(element, patternMatchers)
+      elements.push(...result)
     } else {
-      parts.push(part)
+      elements.push(element)
     }
 
     current = match.a.end
   }
 
   if (current < inputText.length) {
-    const input = inputText.substring(current)
-    const part = new PatternMatchPart(input, currentTypes)
-    parts.push(part)
-  }
-
-  return parts
-}
-
-
-class PatternToHtmlContainer {
-  matchType: string
-  converter: () => HTMLElement
-
-  constructor(matchType: string, converter: () => HTMLElement) {
-    this.matchType = matchType
-    this.converter = converter
-  }
-  wrap(_: string | HTMLElement) {
-    const container = this.converter()
-    if (typeof _ === "string") {
-      container.innerText = _
-    } else {
-      container.appendChild(_)
-    }
-    return container
-  }
-}
-
-
-function defaultHTMLContainerConverters() {
-  const underlineConverter = new PatternToHtmlContainer('underline', () => {
-    const u = document.createElement("u")
-    return u
-  })
-
-  const quoteConverter = new PatternToHtmlContainer('bold', () => {
-    const b = document.createElement("b")
-    b.style.color = "pink"
-    return b
-  })
-
-  const codeConverter = new PatternToHtmlContainer('code', () => {
-    const div = document.createElement("div")
-    div.style.fontFamily = "'Courier New', monospace"
-    return div
-  })
-  const boldConverter = new PatternToHtmlContainer('bold', () => {
-    const b = document.createElement("b")
-    return b
-  })
-
-  const headerConverter = new PatternToHtmlContainer('header', () => {
-    const header = document.createElement("h1")
-    header.style.display = "inline"
-    return header
-  })
-
-  const hashtagConverter = new PatternToHtmlContainer('hashtag', () => {
-    const hashtag = document.createElement("b")
-    hashtag.style.color = "blue"
-    return hashtag
-  })
-
-  const italicConverter = new PatternToHtmlContainer('italic', () => {
-    const italic = document.createElement("span")
-    italic.style.fontStyle = "italic"
-    return italic
-  })
-
-  const usernameConverter = new PatternToHtmlContainer('username', () => {
-    const a = document.createElement('a')
-    a.href = "#"
-    a.addEventListener('click', _ => {
-      _.preventDefault()
+    const text = inputText.substring(current)
+    elements.push({
+      text, elementType: currentTypes
     })
-    return a
-  })
-
-  const hyperLinkConverter = new PatternToHtmlContainer('hyperlink', () => new HyperLinkElement())
-
-  return [boldConverter, headerConverter, hashtagConverter, italicConverter, usernameConverter, codeConverter, hyperLinkConverter, quoteConverter, underlineConverter]
-}
-
-function convertPatternMatchesToHtmlElementsContainers(matches: PatternMatchPart[], converters: PatternToHtmlContainer[]): HTMLElement {
-  const div = document.createElement("div")
-  for (const match of matches) {
-    if (match.matchTypes.length === 0) {
-      const p = document.createElement('span')
-      p.innerText = match.text
-      div.appendChild(p)
-    } else {
-      let innerChild: HTMLElement | undefined
-      const reversedMatchTypes = match.matchTypes.reverse()
-      for (const matchType of reversedMatchTypes) {
-        const converter = converters.find(_ => _.matchType === matchType)
-        if (converter) {
-          innerChild = converter.wrap(innerChild ?? match.text)
-        } else {
-          const p = document.createElement('span')
-          if (innerChild) {
-            p.appendChild(innerChild)
-          } else {
-            p.innerText = match.text
-          }
-          innerChild = p
-        }
-      }
-      if (innerChild) {
-        div.appendChild(innerChild)
-      }
-    }
   }
-  return div
+
+  return elements
+
 }
 
+export const getGlobalStyleSheets = async () => {
+  return Promise.all(Array.from(document.styleSheets).map(x => {
+    const sheet = new CSSStyleSheet()
+    const cssText = Array.from(x.cssRules).map(e => e.cssText).join(' ')
+    return sheet.replace(cssText)
+  }))
+}
+
+export const addGlobalStyleSheetsToShadowRoot = async (shadowRoot: ShadowRoot) => {
+  const sheets = await getGlobalStyleSheets()
+  shadowRoot.adoptedStyleSheets.push(...sheets)
+}
 
 export class HyperLinkElement extends HTMLElement {
+
+  constructor() {
+    super()
+    this.attachShadow({ mode: "open" })
+    addGlobalStyleSheetsToShadowRoot(this.shadowRoot!)
+  }
 
   connectedCallback() {
     this.render()
   }
 
   render() {
-    const innerText = this.innerText
+    const innerText = this.innerHTML.length !== 0 ? this.innerHTML : this.innerText
     if (innerText.length !== 0) {
       let matchArray: RegExpExecArray | null
       while ((matchArray = rawHyperLinkRegex.exec(innerText)) !== null) {
@@ -331,7 +202,8 @@ export class HyperLinkElement extends HTMLElement {
               child = a
 
           }
-          this.replaceChildren(child)
+          // this.replaceChildren(child)
+          this.shadowRoot!.replaceChildren(child)
         }
       }
     }
@@ -339,3 +211,25 @@ export class HyperLinkElement extends HTMLElement {
 }
 
 customElements.define("hyper-link", HyperLinkElement)
+
+// function parseTextToHtmlElement(text: string): HTMLElement {
+//   const elements = _parseText2({ text, elementType: ElementType.Normal }, defaultMatchers())
+//   const p = document.createElement("p")
+//   p.innerText = JSON.stringify(elements) + '\n'
+//   const elem = document.createElement("div")
+//   elem.append(p, new LupydMarkdown({ elements }))
+//   return elem
+// }
+
+
+// const test = () => {
+//   const inputTextArea = document.getElementById("input-text")! as HTMLTextAreaElement
+//   const outputElement = document.getElementById("output-text")! as HTMLElement
+//   inputTextArea.addEventListener("input", _ => {
+//     const text = inputTextArea.value
+//     outputElement.replaceChildren(parseTextToHtmlElement(text))
+//   })
+// }
+
+
+// test()

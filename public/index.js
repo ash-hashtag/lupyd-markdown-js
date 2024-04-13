@@ -1,386 +1,311 @@
-const parseTextToHtmlElement = (text) => {
-  const patternMatches = _parseText(new PatternMatchPart(text), defaultMatchers());
-  const p = document.createElement("p");
-  p.innerText = patternMatches.toString() + "\n";
-  const elem = convertPatternMatchesToHtmlElementsContainers(patternMatches, defaultHTMLContainerConverters());
-  elem.insertAdjacentElement("afterbegin", p);
-  return elem;
-};
-const inputTextArea = document.getElementById("input-text");
-const outputElement = document.getElementById("output-text");
-inputTextArea.addEventListener("input", (_) => {
-  const text = inputTextArea.value;
-  outputElement.replaceChildren(parseTextToHtmlElement(text));
-});
-function areListsEqual(a, b) {
-  if (a === b)
-    return true;
-  if (a.length !== b.length)
-    return false;
-  for (let i = 0; i < a.length; i++) {
-    if (a[i] !== b[i]) {
-      return false;
-    }
+(() => {
+  // src/lupydMarkdown.ts
+  var MAX_ELEMENT_TYPE = 8192 /* CustomStyle */;
+  function hasType(type, checkType) {
+    return (type & checkType) === checkType;
   }
-  return true;
-}
-const rawBoldRegex = /(?<!\\)\*\*\*(.*?)(?<!\\)\*\*\*/gm;
-const rawItalicRegex = /(?<!\\)\/\/\/(.*?)(?<!\\)\/\/\//gm;
-const rawUnderlineRegex = /(?<!\\)___(.*?)(?<!\\)___/gm;
-const rawHeaderRegex = /(?<!\\)###(.*?)(?<!\\)###/gm;
-const rawCodeRegex = /(?<!\\)"""(.*?)(?<!\\)"""/gm;
-const rawHashtagRegex = /(?<!\\)#\w+/gm;
-const rawMentionRegex = /(?<!\\)@\w+/gm;
-const rawQuoteRegex = /^>\|\s.*$/gm;
-const rawHyperLinkRegex = /\[(.+)\]\((.+)\)/gm;
-class Match {
-  start;
-  end;
-  inputText;
-  constructor(start, end, inputText) {
-    this.start = start;
-    this.end = end;
-    this.inputText = inputText;
-  }
-  result() {
-    return this.inputText.substring(this.start, this.end);
-  }
-}
-class PatternMatcher {
-  matcher;
-  delimiter;
-  matchType;
-  lookInwards;
-  singleType;
-  constructor(matcher, delimiter, matchType, lookInwards, singleType) {
-    this.matchType = matchType;
-    this.matcher = matcher;
-    this.delimiter = delimiter;
-    this.lookInwards = lookInwards;
-    this.singleType = singleType;
-  }
-  toString() {
-    return `PatternMatcher { type: ${this.matchType} }`;
-  }
-}
-class RegexPatternMatcher extends PatternMatcher {
-  regex;
-  constructor(regex, matchType, delimiter, lookInwards, singleType) {
-    const matcher = (_) => {
-      let matchArray;
-      let matches = [];
-      regex.lastIndex = 0;
-      while ((matchArray = regex.exec(_)) !== null) {
-        const match = new Match(matchArray.index, matchArray.index + matchArray[0].length, _);
-        matches.push(match);
+  function iterateTypes(type) {
+    const types = [];
+    let checkType = MAX_ELEMENT_TYPE;
+    while (checkType) {
+      if (hasType(type, checkType)) {
+        types.push(checkType);
       }
-      return matches;
-    };
-    super(matcher, delimiter, matchType, lookInwards, singleType);
-    this.regex = regex;
-  }
-}
-const tripleDelimiterBoth = (_) => _.substring(3, _.length - 3);
-const singleDelimiter = (_) => _.substring(1);
-const noDelimiter = (_) => _;
-function defaultMatchers() {
-  const boldMatcher = new RegexPatternMatcher(rawBoldRegex, "bold", tripleDelimiterBoth, true, false);
-  const headerMatcher = new RegexPatternMatcher(rawHeaderRegex, "header", tripleDelimiterBoth, true, false);
-  const codeMatcher = new RegexPatternMatcher(rawCodeRegex, "code", tripleDelimiterBoth, true, false);
-  const italicMatcher = new RegexPatternMatcher(rawItalicRegex, "italic", tripleDelimiterBoth, true, false);
-  const underlineMatcher = new RegexPatternMatcher(rawUnderlineRegex, "underline", tripleDelimiterBoth, true, false);
-  const hashtagMatcher = new RegexPatternMatcher(rawHashtagRegex, "hashtag", singleDelimiter, false, true);
-  const usernameMatcher = new RegexPatternMatcher(rawMentionRegex, "username", singleDelimiter, false, true);
-  const hyperLinkMatcher = new RegexPatternMatcher(rawHyperLinkRegex, "hyperlink", noDelimiter, false, true);
-  const quoteMatcher = new RegexPatternMatcher(rawQuoteRegex, "quote", tripleDelimiterBoth, true, true);
-  return [
-    boldMatcher,
-    headerMatcher,
-    hashtagMatcher,
-    italicMatcher,
-    usernameMatcher,
-    hyperLinkMatcher,
-    quoteMatcher,
-    underlineMatcher,
-    codeMatcher
-  ];
-}
-class PatternMatchPart {
-  text;
-  matchTypes;
-  constructor(text, matchTypes = []) {
-    this.text = text;
-    this.matchTypes = matchTypes;
-  }
-  toString() {
-    return `{ text: ${this.text}, type: ${this.matchTypes} }`;
-  }
-  isEqual(other) {
-    if (other === this) {
-      return true;
+      checkType = checkType >> 1;
     }
-    return other.text === this.text && areListsEqual(other.matchTypes, this.matchTypes);
+    return types;
   }
-}
-function _parseText(inputPart, patternMatchers) {
-  const inputText = inputPart.text;
-  const parts = [];
-  if (patternMatchers.length === 0) {
-    return [inputPart];
-  }
-  const patternMatches = [];
-  for (const patternMatcher of patternMatchers) {
-    patternMatches.push(...patternMatcher.matcher(inputText).map((e) => ({ a: e, b: patternMatcher })));
-  }
-  patternMatches.sort((a, b) => a.a.start - b.a.start);
-  let current = 0;
-  let currentTypes = [...inputPart.matchTypes];
-  for (const match of patternMatches) {
-    if (current > match.a.start) {
-      continue;
-    }
-    if (current < match.a.start) {
-      const part2 = new PatternMatchPart(inputText.substring(current, match.a.start), currentTypes);
-      const result = _parseText(part2, patternMatchers);
-      parts.push(...result);
-    }
-    const matchTypes = match.b.singleType ? [match.b.matchType] : [...currentTypes, match.b.matchType];
-    const part = new PatternMatchPart(match.b.delimiter(inputText.substring(match.a.start, match.a.end)), matchTypes);
-    if (match.b.lookInwards) {
-      const result = _parseText(part, patternMatchers);
-      parts.push(...result);
+  function wrapTag(tagName, child, className) {
+    const p = document.createElement(tagName);
+    if (typeof child === "string") {
+      p.innerText = child;
     } else {
-      parts.push(part);
+      p.append(child);
     }
-    current = match.a.end;
+    if (className)
+      p.classList.add(className);
+    return p;
   }
-  if (current < inputText.length) {
-    const input = inputText.substring(current);
-    const part = new PatternMatchPart(input, currentTypes);
-    parts.push(part);
-  }
-  return parts;
-}
-class PatternToHtmlElementConverter {
-  matchType;
-  converter;
-  constructor(matchType, converter) {
-    this.matchType = matchType;
-    this.converter = converter;
-  }
-}
-class PatternToHtmlContainer {
-  matchType;
-  converter;
-  constructor(matchType, converter) {
-    this.matchType = matchType;
-    this.converter = converter;
-  }
-  wrap(_) {
-    const container = this.converter();
-    if (typeof _ === "string") {
-      container.innerText = _;
-    } else {
-      container.appendChild(_);
-    }
-    return container;
-  }
-}
-function defaultHTMLConverters() {
-  const boldConverter = new PatternToHtmlElementConverter("bold", (_) => {
-    const b = document.createElement("b");
-    b.innerText = _;
-    return b;
-  });
-  const quoteConverter = new PatternToHtmlElementConverter("bold", (_) => {
-    const b = document.createElement("b");
-    b.innerText = _;
-    b.style.color = "pink";
-    return b;
-  });
-  const hyperLinkConverter = new PatternToHtmlElementConverter("hyperlink", (_) => {
-    const div = document.createElement("div");
-    div.innerText = _;
-    div.style.color = "blue";
-    div.style.display = "inline";
-    return div;
-  });
-  const codeConverter = new PatternToHtmlElementConverter("code", (_) => {
-    const div = document.createElement("div");
-    div.innerText = _;
-    div.style.fontFamily = "'Courier New', monospace";
-    return div;
-  });
-  const usernameConverter = new PatternToHtmlElementConverter("username", (_) => {
-    const b = document.createElement("b");
-    b.innerText = _;
-    b.style.color = "grey";
-    return b;
-  });
-  const headerConverter = new PatternToHtmlElementConverter("header", (_) => {
-    const header = document.createElement("h1");
-    header.style.display = "inline";
-    header.innerText = _;
-    return header;
-  });
-  const underlineConverter = new PatternToHtmlElementConverter("underline", (_) => {
-    const u = document.createElement("u");
-    u.innerText = _;
-    return u;
-  });
-  const hashtagConverter = new PatternToHtmlElementConverter("hashtag", (_) => {
-    const hashtag = document.createElement("b");
-    hashtag.style.color = "blue";
-    hashtag.innerText = _;
-    return hashtag;
-  });
-  const italicConverter = new PatternToHtmlElementConverter("italic", (_) => {
-    const italic = document.createElement("span");
-    italic.style.fontStyle = "italic";
-    italic.innerText = _;
-    return italic;
-  });
-  return [boldConverter, headerConverter, hashtagConverter, italicConverter, hyperLinkConverter, codeConverter, usernameConverter, quoteConverter, underlineConverter];
-}
-function defaultHTMLContainerConverters() {
-  const underlineConverter = new PatternToHtmlContainer("underline", () => {
-    const u = document.createElement("u");
-    return u;
-  });
-  const quoteConverter = new PatternToHtmlContainer("bold", () => {
-    const b = document.createElement("b");
-    b.style.color = "pink";
-    return b;
-  });
-  const hyperLinkConverter = new PatternToHtmlContainer("hyperlink", () => {
-    return new HyperLinkElement();
-  });
-  const codeConverter = new PatternToHtmlContainer("code", () => {
-    const div = document.createElement("div");
-    div.style.fontFamily = "'Courier New', monospace";
-    return div;
-  });
-  const boldConverter = new PatternToHtmlContainer("bold", () => {
-    const b = document.createElement("b");
-    return b;
-  });
-  const headerConverter = new PatternToHtmlContainer("header", () => {
-    const header = document.createElement("h1");
-    header.style.display = "inline";
-    return header;
-  });
-  const hashtagConverter = new PatternToHtmlContainer("hashtag", () => {
-    const hashtag = document.createElement("b");
-    hashtag.style.color = "blue";
-    return hashtag;
-  });
-  const italicConverter = new PatternToHtmlContainer("italic", () => {
-    const italic = document.createElement("span");
-    italic.style.fontStyle = "italic";
-    return italic;
-  });
-  const usernameConverter = new PatternToHtmlContainer("username", () => {
+  function aTag(href) {
     const a = document.createElement("a");
-    a.href = "#";
-    a.addEventListener("click", (_) => {
-      _.preventDefault();
-    });
+    a.href = href;
     return a;
-  });
-  return [boldConverter, headerConverter, hashtagConverter, italicConverter, usernameConverter, codeConverter, hyperLinkConverter, quoteConverter, underlineConverter];
-}
-function convertPatternMatchesToHtmlElements(matches, converters) {
-  const div = document.createElement("div");
-  for (const match of matches) {
-    if (match.matchTypes.length === 0) {
-      const p = document.createElement("span");
-      p.innerText = match.text;
-      div.appendChild(p);
+  }
+  function wrapToHtmlElement(child, type) {
+    switch (type) {
+      case 1 /* Bold */:
+        return wrapTag("b", child);
+      case 0 /* Normal */:
+        return wrapTag("span", child);
+      case 2 /* Italic */:
+        return wrapTag("i", child);
+      case 4 /* Header */:
+        return wrapTag("h1", child);
+      case 8 /* UnderLine */:
+        return wrapTag("u", child);
+      case 16 /* Code */:
+        return wrapTag("tt", child);
+      case 32 /* Quote */:
+        return wrapTag("b", child, "quote");
+      case 64 /* Spoiler */:
+        return wrapTag("span", child, "spoiler");
+      case 128 /* HyperLink */:
+        return wrapTag("hyper-link", child);
+      case 256 /* Mention */:
+        return wrapTag("b", child, "mention");
+      case 512 /* HashTag */:
+        return wrapTag("b", child, "hashtag");
+      case 1024 /* ImageLink */: {
+        const img = document.createElement("img");
+        if (typeof child === "string")
+          img.src = child;
+        return img;
+      }
+      case 2048 /* VideoLink */: {
+        const vid = document.createElement("video");
+        if (typeof child === "string") {
+          vid.src = child;
+        }
+      }
+      case 4096 /* PlaceHolderLink */:
+        return aTag(typeof child === "string" ? child : "#");
+      case 8192 /* CustomStyle */:
+    }
+    if (typeof child === "string") {
+      return wrapTag("span", child);
     } else {
-      for (const matchType of match.matchTypes) {
-        const converter = converters.find((_) => _.matchType === matchType);
-        if (converter) {
-          div.appendChild(converter.converter(match.text));
-        } else {
-          const p = document.createElement("span");
-          p.innerText = match.text;
-          div.appendChild(p);
-        }
-      }
+      return child;
     }
   }
-  return div;
-}
-function convertPatternMatchesToHtmlElementsContainers(matches, converters) {
-  const div = document.createElement("div");
-  for (const match of matches) {
-    if (match.matchTypes.length === 0) {
-      const p = document.createElement("span");
-      p.innerText = match.text;
-      div.appendChild(p);
+  function convertToHTMLElement(element) {
+    const type = element.elementType;
+    const text = element.text;
+    let child = text;
+    for (const _type of iterateTypes(type)) {
+      child = wrapToHtmlElement(child, _type);
+    }
+    if (typeof child === "string") {
+      return wrapTag("span", child);
     } else {
-      let innerChild;
-      const reversedMatchTypes = match.matchTypes.reverse();
-      for (const matchType of reversedMatchTypes) {
-        const converter = converters.find((_) => _.matchType === matchType);
-        if (converter) {
-          innerChild = converter.wrap(innerChild ?? match.text);
-        } else {
-          const p = document.createElement("span");
-          if (innerChild) {
-            p.appendChild(innerChild);
-          } else {
-            p.innerText = match.text;
-          }
-          innerChild = p;
-        }
-      }
-      if (innerChild) {
-        div.appendChild(innerChild);
-      }
+      return child;
     }
   }
-  return div;
-}
-class HyperLinkElement extends HTMLElement {
-  constructor() {
-    super();
+  var LupydMarkdown = class extends HTMLElement {
+    markdown;
+    constructor(markdown) {
+      super();
+      this.markdown = markdown;
+    }
+    connectedCallback() {
+      this.render();
+    }
+    render() {
+      console.time(`Markdown render`);
+      const children = this.markdown.elements.map(convertToHTMLElement);
+      this.replaceChildren(...children);
+      console.timeEnd(`Markdown render`);
+    }
+  };
+  customElements.define("lupyd-markdown", LupydMarkdown);
+
+  // src/index.ts
+  function parseTextToHtmlElement(text) {
+    const elements = _parseText2({ text, elementType: 0 /* Normal */ }, defaultMatchers());
+    const p = document.createElement("p");
+    p.innerText = JSON.stringify(elements) + "\n";
+    const elem = document.createElement("div");
+    elem.append(p, new LupydMarkdown({ elements }));
+    return elem;
   }
-  connectedCallback() {
-    this.render();
+  var rawBoldRegex = /(?<!\\)\*\*\*(.*?)(?<!\\)\*\*\*/gm;
+  var rawItalicRegex = /(?<!\\)\/\/\/(.*?)(?<!\\)\/\/\//gm;
+  var rawUnderlineRegex = /(?<!\\)___(.*?)(?<!\\)___/gm;
+  var rawHeaderRegex = /(?<!\\)###(.*?)(?<!\\)###/gm;
+  var rawCodeRegex = /(?<!\\)"""(.*?)(?<!\\)"""/gm;
+  var rawHashtagRegex = /(?<!\\)#\w+/gm;
+  var rawMentionRegex = /(?<!\\)@\w+/gm;
+  var rawQuoteRegex = /^>\|\s.*$/gm;
+  var rawHyperLinkRegex = /\[(.+)\]\((.+)\)/gm;
+  var Match = class {
+    start;
+    end;
+    inputText;
+    constructor(start, end, inputText) {
+      this.start = start;
+      this.end = end;
+      this.inputText = inputText;
+    }
+    result() {
+      return this.inputText.substring(this.start, this.end);
+    }
+  };
+  var PatternMatcher = class {
+    matcher;
+    delimiter;
+    matchType;
+    lookInwards;
+    singleType;
+    constructor(matcher, delimiter, matchType, lookInwards, singleType) {
+      this.matchType = matchType;
+      this.matcher = matcher;
+      this.delimiter = delimiter;
+      this.lookInwards = lookInwards;
+      this.singleType = singleType;
+    }
+    toString() {
+      return `PatternMatcher { type: ${this.matchType} }`;
+    }
+  };
+  var RegexPatternMatcher = class extends PatternMatcher {
+    regex;
+    constructor(regex, matchType, delimiter, lookInwards, singleType) {
+      const matcher = (_) => {
+        let matchArray;
+        let matches = [];
+        regex.lastIndex = 0;
+        while ((matchArray = regex.exec(_)) !== null) {
+          const match = new Match(matchArray.index, matchArray.index + matchArray[0].length, _);
+          matches.push(match);
+        }
+        return matches;
+      };
+      super(matcher, delimiter, matchType, lookInwards, singleType);
+      this.regex = regex;
+    }
+  };
+  var tripleDelimiterBoth = (_) => _.substring(3, _.length - 3);
+  var singleDelimiter = (_) => _.substring(1);
+  var noDelimiter = (_) => _;
+  function defaultMatchers() {
+    const boldMatcher = new RegexPatternMatcher(rawBoldRegex, 1 /* Bold */, tripleDelimiterBoth, true, false);
+    const headerMatcher = new RegexPatternMatcher(rawHeaderRegex, 4 /* Header */, tripleDelimiterBoth, true, false);
+    const codeMatcher = new RegexPatternMatcher(rawCodeRegex, 16 /* Code */, tripleDelimiterBoth, true, false);
+    const italicMatcher = new RegexPatternMatcher(rawItalicRegex, 2 /* Italic */, tripleDelimiterBoth, true, false);
+    const underlineMatcher = new RegexPatternMatcher(rawUnderlineRegex, 8 /* UnderLine */, tripleDelimiterBoth, true, false);
+    const hashtagMatcher = new RegexPatternMatcher(rawHashtagRegex, 512 /* HashTag */, singleDelimiter, false, true);
+    const usernameMatcher = new RegexPatternMatcher(rawMentionRegex, 256 /* Mention */, singleDelimiter, false, true);
+    const hyperLinkMatcher = new RegexPatternMatcher(rawHyperLinkRegex, 128 /* HyperLink */, noDelimiter, false, true);
+    const quoteMatcher = new RegexPatternMatcher(rawQuoteRegex, 32 /* Quote */, tripleDelimiterBoth, true, true);
+    return [
+      boldMatcher,
+      headerMatcher,
+      hashtagMatcher,
+      italicMatcher,
+      usernameMatcher,
+      hyperLinkMatcher,
+      quoteMatcher,
+      underlineMatcher,
+      codeMatcher
+    ];
   }
-  render() {
-    const innerText = this.innerText;
-    if (innerText.length !== 0) {
-      let matchArray;
-      while ((matchArray = rawHyperLinkRegex.exec(innerText)) !== null) {
-        if (matchArray.length === 3) {
-          const url = matchArray[2];
-          const tag = matchArray[1];
-          let child;
-          switch (tag) {
-            case "image":
-              const img = document.createElement("img");
-              img.src = url;
-              img.alt = tag;
-              child = img;
-              break;
-            case "video":
-              const vid = document.createElement("video");
-              vid.controls = true;
-              vid.src = url;
-              child = vid;
-              break;
-            default:
-              const a = document.createElement("a");
-              a.innerText = tag;
-              a.href = url;
-              child = a;
+  function _parseText2(inputPart, patternMatchers) {
+    const elements = [];
+    const inputText = inputPart.text;
+    if (patternMatchers.length === 0) {
+      return [inputPart];
+    }
+    const patternMatches = [];
+    for (const patternMatcher of patternMatchers) {
+      patternMatches.push(...patternMatcher.matcher(inputText).map((e) => ({ a: e, b: patternMatcher })));
+    }
+    patternMatches.sort((a, b) => a.a.start - b.a.start);
+    let current = 0;
+    let currentTypes = inputPart.elementType;
+    for (const match of patternMatches) {
+      if (current > match.a.start) {
+        continue;
+      }
+      if (current < match.a.start) {
+        const result = _parseText2({
+          text: inputText.substring(current, match.a.start),
+          elementType: currentTypes
+        }, patternMatchers);
+        elements.push(...result);
+      }
+      const matchTypes = match.b.singleType ? match.b.matchType : currentTypes | match.b.matchType;
+      const element = {
+        text: match.b.delimiter(inputText.substring(match.a.start, match.a.end)),
+        elementType: matchTypes
+      };
+      if (match.b.lookInwards) {
+        const result = _parseText2(element, patternMatchers);
+        elements.push(...result);
+      } else {
+        elements.push(element);
+      }
+      current = match.a.end;
+    }
+    if (current < inputText.length) {
+      const text = inputText.substring(current);
+      elements.push({
+        text,
+        elementType: currentTypes
+      });
+    }
+    return elements;
+  }
+  var getGlobalStyleSheets = async () => {
+    return Promise.all(Array.from(document.styleSheets).map((x) => {
+      const sheet = new CSSStyleSheet();
+      const cssText = Array.from(x.cssRules).map((e) => e.cssText).join(" ");
+      return sheet.replace(cssText);
+    }));
+  };
+  var addGlobalStyleSheetsToShadowRoot = async (shadowRoot) => {
+    const sheets = await getGlobalStyleSheets();
+    shadowRoot.adoptedStyleSheets.push(...sheets);
+  };
+  var HyperLinkElement = class extends HTMLElement {
+    constructor() {
+      super();
+      this.attachShadow({ mode: "open" });
+      addGlobalStyleSheetsToShadowRoot(this.shadowRoot);
+    }
+    connectedCallback() {
+      this.render();
+    }
+    render() {
+      const innerText = this.innerHTML.length !== 0 ? this.innerHTML : this.innerText;
+      if (innerText.length !== 0) {
+        let matchArray;
+        while ((matchArray = rawHyperLinkRegex.exec(innerText)) !== null) {
+          if (matchArray.length === 3) {
+            const url = matchArray[2];
+            const tag = matchArray[1];
+            let child;
+            switch (tag) {
+              case "image":
+                const img = document.createElement("img");
+                img.src = url;
+                img.alt = tag;
+                child = img;
+                break;
+              case "video":
+                const vid = document.createElement("video");
+                vid.controls = true;
+                vid.src = url;
+                child = vid;
+                break;
+              default:
+                const a = document.createElement("a");
+                a.innerText = tag;
+                a.href = url;
+                child = a;
+            }
+            this.shadowRoot.replaceChildren(child);
           }
-          this.replaceChildren(child);
         }
       }
     }
-  }
-}
-customElements.define("hyper-link", HyperLinkElement);
+  };
+  customElements.define("hyper-link", HyperLinkElement);
+  var test = () => {
+    const inputTextArea = document.getElementById("input-text");
+    const outputElement = document.getElementById("output-text");
+    inputTextArea.addEventListener("input", (_) => {
+      const text = inputTextArea.value;
+      outputElement.replaceChildren(parseTextToHtmlElement(text));
+    });
+  };
+  test();
+})();
