@@ -1,6 +1,28 @@
 (() => {
   // src/lupydMarkdown.ts
-  var MAX_ELEMENT_TYPE = 8192 /* CustomStyle */;
+  var rawHyperLinkRegex = /\[(.+)\]\((.+)\)/gm;
+  var rawBoldRegex = /(?<!\\)\*\*\*(.*?)(?<!\\)\*\*\*/gm;
+  var rawItalicRegex = /(?<!\\)\/\/\/(.*?)(?<!\\)\/\/\//gm;
+  var rawUnderlineRegex = /(?<!\\)___(.*?)(?<!\\)___/gm;
+  var rawHeaderRegex = /(?<!\\)###(.*?)(?<!\\)###/gm;
+  var rawCodeRegex = /(?<!\\)```(.*?)(?<!\\)```/gm;
+  var rawSpoilerRegex = /(?<!\\)\|\|\|(.*?)(?<!\\)\|\|\|/gm;
+  var rawHashtagRegex = /(?<!\\)#\w+/gm;
+  var rawMentionRegex = /(?<!\\)@\w+/gm;
+  var rawQuoteRegex = /^>\|\s.*$/gm;
+  var rawSvgRegex = /(?<!\\)<svg\s*(?:\s+[^>]+)?>(?:(?!<\/svg>).)*?(?<!\\)<\/svg>/gm;
+  var getGlobalStyleSheets = async () => {
+    return Promise.all(Array.from(document.styleSheets).map((x) => {
+      const sheet = new CSSStyleSheet();
+      const cssText = Array.from(x.cssRules).map((e) => e.cssText).join(" ");
+      return sheet.replace(cssText);
+    }));
+  };
+  var addGlobalStyleSheetsToShadowRoot = async (shadowRoot) => {
+    const sheets = await getGlobalStyleSheets();
+    shadowRoot.adoptedStyleSheets.push(...sheets);
+  };
+  var MAX_ELEMENT_TYPE = 8192 /* Svg */;
   function hasType(type, checkType) {
     return (type & checkType) === checkType;
   }
@@ -15,117 +37,81 @@
     }
     return types;
   }
-  function wrapTag(tagName, child, className) {
-    const p = document.createElement(tagName);
-    if (typeof child === "string") {
-      p.innerText = child;
-    } else {
-      p.append(child);
-    }
-    if (className)
-      p.classList.add(className);
-    return p;
-  }
-  function aTag(href) {
-    const a = document.createElement("a");
-    a.href = href;
-    return a;
-  }
-  function wrapToHtmlElement(child, type) {
-    switch (type) {
-      case 1 /* Bold */:
-        return wrapTag("b", child);
-      case 0 /* Normal */:
-        return wrapTag("span", child);
-      case 2 /* Italic */:
-        return wrapTag("i", child);
-      case 4 /* Header */:
-        return wrapTag("h1", child);
-      case 8 /* UnderLine */:
-        return wrapTag("u", child);
-      case 16 /* Code */:
-        return wrapTag("tt", child);
-      case 32 /* Quote */:
-        return wrapTag("b", child, "quote");
-      case 64 /* Spoiler */:
-        return wrapTag("span", child, "spoiler");
-      case 128 /* HyperLink */:
-        return wrapTag("hyper-link", child);
-      case 256 /* Mention */:
-        return wrapTag("b", child, "mention");
-      case 512 /* HashTag */:
-        return wrapTag("b", child, "hashtag");
-      case 1024 /* ImageLink */: {
-        const img = document.createElement("img");
-        if (typeof child === "string")
-          img.src = child;
-        return img;
-      }
-      case 2048 /* VideoLink */: {
-        const vid = document.createElement("video");
-        if (typeof child === "string") {
-          vid.src = child;
-        }
-      }
-      case 4096 /* PlaceHolderLink */:
-        return aTag(typeof child === "string" ? child : "#");
-      case 8192 /* CustomStyle */:
-    }
-    if (typeof child === "string") {
-      return wrapTag("span", child);
-    } else {
-      return child;
-    }
-  }
-  function convertToHTMLElement(element) {
-    const type = element.elementType;
-    const text = element.text;
-    let child = text;
-    for (const _type of iterateTypes(type)) {
-      child = wrapToHtmlElement(child, _type);
-    }
-    if (typeof child === "string") {
-      return wrapTag("span", child);
-    } else {
-      return child;
-    }
-  }
+  var style = `
+.spoiler, .spoiler a { 
+  color: black; 
+  background-color: black;
+}
+
+.spoiler:hover, .spoiler:hover a {
+  background-color: white;
+}
+`;
+  new CSSStyleSheet().replace(style).then((ss) => {
+    document.adoptedStyleSheets.push(ss);
+  }).catch(console.error);
   var LupydMarkdown = class extends HTMLElement {
     markdown;
-    constructor(markdown) {
+    convertToHtmlElement;
+    constructor(markdown, convertToHtmlElement) {
       super();
       this.markdown = markdown;
+      this.convertToHtmlElement = convertToHtmlElement;
     }
     connectedCallback() {
       this.render();
     }
     render() {
-      console.time(`Markdown render`);
-      const children = this.markdown.elements.map(convertToHTMLElement);
-      this.replaceChildren(...children);
-      console.timeEnd(`Markdown render`);
+      this.replaceChildren(...this.markdown.elements.map(this.convertToHtmlElement));
     }
   };
   customElements.define("lupyd-markdown", LupydMarkdown);
+  var HyperLinkElement = class extends HTMLElement {
+    constructor() {
+      super();
+      this.attachShadow({ mode: "open" });
+      addGlobalStyleSheetsToShadowRoot(this.shadowRoot);
+    }
+    connectedCallback() {
+      this.render();
+    }
+    render() {
+      const innerText = this.innerHTML.length !== 0 ? this.innerHTML : this.innerText;
+      if (innerText.length !== 0) {
+        let matchArray;
+        while ((matchArray = rawHyperLinkRegex.exec(innerText)) !== null) {
+          if (matchArray.length === 3) {
+            const url = matchArray[2];
+            const tag = matchArray[1];
+            let child;
+            switch (tag) {
+              case "image":
+                const img = document.createElement("img");
+                img.src = url;
+                img.alt = tag;
+                child = img;
+                break;
+              case "video":
+                const vid = document.createElement("video");
+                vid.controls = true;
+                vid.src = url;
+                child = vid;
+                break;
+              default:
+                const a = document.createElement("a");
+                a.innerText = tag;
+                a.href = url;
+                child = a;
+            }
+            this.shadowRoot.replaceChildren(child);
+          }
+        }
+      }
+    }
+  };
+  customElements.define("hyper-link", HyperLinkElement);
 
   // src/index.ts
-  function parseTextToHtmlElement(text) {
-    const elements = _parseText2({ text, elementType: 0 /* Normal */ }, defaultMatchers());
-    const p = document.createElement("p");
-    p.innerText = JSON.stringify(elements) + "\n";
-    const elem = document.createElement("div");
-    elem.append(p, new LupydMarkdown({ elements }));
-    return elem;
-  }
-  var rawBoldRegex = /(?<!\\)\*\*\*(.*?)(?<!\\)\*\*\*/gm;
-  var rawItalicRegex = /(?<!\\)\/\/\/(.*?)(?<!\\)\/\/\//gm;
-  var rawUnderlineRegex = /(?<!\\)___(.*?)(?<!\\)___/gm;
-  var rawHeaderRegex = /(?<!\\)###(.*?)(?<!\\)###/gm;
-  var rawCodeRegex = /(?<!\\)"""(.*?)(?<!\\)"""/gm;
-  var rawHashtagRegex = /(?<!\\)#\w+/gm;
-  var rawMentionRegex = /(?<!\\)@\w+/gm;
-  var rawQuoteRegex = /^>\|\s.*$/gm;
-  var rawHyperLinkRegex = /\[(.+)\]\((.+)\)/gm;
   var Match = class {
     start;
     end;
@@ -186,17 +172,99 @@
     const usernameMatcher = new RegexPatternMatcher(rawMentionRegex, 256 /* Mention */, singleDelimiter, false, true);
     const hyperLinkMatcher = new RegexPatternMatcher(rawHyperLinkRegex, 128 /* HyperLink */, noDelimiter, false, true);
     const quoteMatcher = new RegexPatternMatcher(rawQuoteRegex, 32 /* Quote */, tripleDelimiterBoth, true, true);
+    const svgMatcher = new RegexPatternMatcher(rawSvgRegex, 8192 /* Svg */, noDelimiter, false, true);
+    const spoilerMatcher = new RegexPatternMatcher(rawSpoilerRegex, 64 /* Spoiler */, tripleDelimiterBoth, false, true);
     return [
       boldMatcher,
       headerMatcher,
+      spoilerMatcher,
       hashtagMatcher,
       italicMatcher,
       usernameMatcher,
       hyperLinkMatcher,
       quoteMatcher,
       underlineMatcher,
-      codeMatcher
+      codeMatcher,
+      svgMatcher
     ];
+  }
+  function wrapTag(tagName, child, className) {
+    const p = document.createElement(tagName);
+    if (typeof child === "string") {
+      p.innerText = child;
+    } else {
+      p.append(child);
+    }
+    if (className)
+      p.classList.add(className);
+    return p;
+  }
+  function aTag(href) {
+    const a = document.createElement("a");
+    a.href = href;
+    return a;
+  }
+  function convertToHTMLElement(element, wrapToHtmlElement) {
+    const type = element.elementType;
+    const text = element.text;
+    let child = text;
+    for (const _type of iterateTypes(type)) {
+      child = wrapToHtmlElement(child, _type);
+    }
+    if (typeof child === "string") {
+      return wrapTag("span", child);
+    } else {
+      return child;
+    }
+  }
+  function defaultWrapToHtmlElement(child, type) {
+    switch (type) {
+      case 1 /* Bold */:
+        return wrapTag("b", child);
+      case 0 /* Normal */:
+        return wrapTag("span", child);
+      case 2 /* Italic */:
+        return wrapTag("i", child);
+      case 4 /* Header */:
+        return wrapTag("h1", child);
+      case 8 /* UnderLine */:
+        return wrapTag("u", child);
+      case 16 /* Code */:
+        return wrapTag("tt", child);
+      case 32 /* Quote */:
+        return wrapTag("b", child, "quote");
+      case 64 /* Spoiler */:
+        return wrapTag("span", child, "spoiler");
+      case 128 /* HyperLink */:
+        return wrapTag("hyper-link", child);
+      case 256 /* Mention */:
+        return wrapTag("b", child, "mention");
+      case 512 /* HashTag */:
+        return wrapTag("b", child, "hashtag");
+      case 1024 /* ImageLink */: {
+        const img = document.createElement("img");
+        if (typeof child === "string")
+          img.src = child;
+        return img;
+      }
+      case 2048 /* VideoLink */: {
+        const vid = document.createElement("video");
+        if (typeof child === "string") {
+          vid.src = child;
+        }
+        return vid;
+      }
+      case 4096 /* PlaceHolderLink */:
+        return aTag(typeof child === "string" ? child : "#");
+      case 8192 /* Svg */: {
+        const div = document.createElement("div");
+        if (typeof child === "string")
+          div.innerHTML = child;
+        else
+          div.append(child);
+        return div.firstElementChild;
+      }
+    }
   }
   function _parseText2(inputPart, patternMatchers) {
     const elements = [];
@@ -244,61 +312,13 @@
     }
     return elements;
   }
-  var getGlobalStyleSheets = async () => {
-    return Promise.all(Array.from(document.styleSheets).map((x) => {
-      const sheet = new CSSStyleSheet();
-      const cssText = Array.from(x.cssRules).map((e) => e.cssText).join(" ");
-      return sheet.replace(cssText);
-    }));
-  };
-  var addGlobalStyleSheetsToShadowRoot = async (shadowRoot) => {
-    const sheets = await getGlobalStyleSheets();
-    shadowRoot.adoptedStyleSheets.push(...sheets);
-  };
-  var HyperLinkElement = class extends HTMLElement {
-    constructor() {
-      super();
-      this.attachShadow({ mode: "open" });
-      addGlobalStyleSheetsToShadowRoot(this.shadowRoot);
-    }
-    connectedCallback() {
-      this.render();
-    }
-    render() {
-      const innerText = this.innerHTML.length !== 0 ? this.innerHTML : this.innerText;
-      if (innerText.length !== 0) {
-        let matchArray;
-        while ((matchArray = rawHyperLinkRegex.exec(innerText)) !== null) {
-          if (matchArray.length === 3) {
-            const url = matchArray[2];
-            const tag = matchArray[1];
-            let child;
-            switch (tag) {
-              case "image":
-                const img = document.createElement("img");
-                img.src = url;
-                img.alt = tag;
-                child = img;
-                break;
-              case "video":
-                const vid = document.createElement("video");
-                vid.controls = true;
-                vid.src = url;
-                child = vid;
-                break;
-              default:
-                const a = document.createElement("a");
-                a.innerText = tag;
-                a.href = url;
-                child = a;
-            }
-            this.shadowRoot.replaceChildren(child);
-          }
-        }
-      }
-    }
-  };
-  customElements.define("hyper-link", HyperLinkElement);
+  function parseTextToMarkdown(text) {
+    const elements = _parseText2({ text, elementType: 0 /* Normal */ }, defaultMatchers());
+    return { elements };
+  }
+  function parseTextToHtmlElement(text) {
+    return new LupydMarkdown(parseTextToMarkdown(text), (el) => convertToHTMLElement(el, defaultWrapToHtmlElement));
+  }
   var test = () => {
     const inputTextArea = document.getElementById("input-text");
     const outputElement = document.getElementById("output-text");

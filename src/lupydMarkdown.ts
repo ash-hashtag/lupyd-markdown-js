@@ -1,4 +1,28 @@
 
+export const rawHyperLinkRegex = /\[(.+)\]\((.+)\)/gm
+export const rawBoldRegex = /(?<!\\)\*\*\*(.*?)(?<!\\)\*\*\*/gm
+export const rawItalicRegex = /(?<!\\)\/\/\/(.*?)(?<!\\)\/\/\//gm
+export const rawUnderlineRegex = /(?<!\\)___(.*?)(?<!\\)___/gm
+export const rawHeaderRegex = /(?<!\\)###(.*?)(?<!\\)###/gm
+export const rawCodeRegex = /(?<!\\)```(.*?)(?<!\\)```/gm
+export const rawSpoilerRegex = /(?<!\\)\|\|\|(.*?)(?<!\\)\|\|\|/gm
+export const rawHashtagRegex = /(?<!\\)#\w+/gm
+export const rawMentionRegex = /(?<!\\)@\w+/gm
+export const rawQuoteRegex = /^>\|\s.*$/gm
+export const rawSvgRegex = /(?<!\\)<svg\s*(?:\s+[^>]+)?>(?:(?!<\/svg>).)*?(?<!\\)<\/svg>/gm
+
+export const getGlobalStyleSheets = async () => {
+  return Promise.all(Array.from(document.styleSheets).map(x => {
+    const sheet = new CSSStyleSheet()
+    const cssText = Array.from(x.cssRules).map(e => e.cssText).join(' ')
+    return sheet.replace(cssText)
+  }))
+}
+
+export const addGlobalStyleSheetsToShadowRoot = async (shadowRoot: ShadowRoot) => {
+  const sheets = await getGlobalStyleSheets()
+  shadowRoot.adoptedStyleSheets.push(...sheets)
+}
 export enum ElementType {
   Normal = 0,
   Bold = 1,
@@ -14,10 +38,10 @@ export enum ElementType {
   ImageLink = 1024,
   VideoLink = 2048,
   PlaceHolderLink = 4096,
-  CustomStyle = 4096 * 2,
+  Svg = 4096 * 2,
 }
 
-const MAX_ELEMENT_TYPE = ElementType.CustomStyle
+const MAX_ELEMENT_TYPE = ElementType.Svg
 
 export interface Markdown {
   elements: Element[];
@@ -32,7 +56,7 @@ function hasType(type: ElementType, checkType: ElementType) {
   return (type & checkType) === checkType
 }
 
-function iterateTypes(type: ElementType) {
+export function iterateTypes(type: ElementType) {
   const types: ElementType[] = []
   let checkType = MAX_ELEMENT_TYPE
   while (checkType) {
@@ -45,97 +69,99 @@ function iterateTypes(type: ElementType) {
   return types
 }
 
-function wrapTag(tagName: string, child: string | HTMLElement, className?: string) {
-  const p = document.createElement(tagName)
-  if (typeof child === "string") {
-    p.innerText = child
-  } else {
-    p.append(child)
-  }
 
-  if (className)
-    p.classList.add(className)
+export type WrapToHtmlElementFunction = (_: string | HTMLElement, __: ElementType) => HTMLElement
 
-  return p
+
+const style = `
+.spoiler, .spoiler a { 
+  color: black; 
+  background-color: black;
 }
 
-function aTag(href: string) {
-  const a = document.createElement("a")
-  a.href = href
-  return a
+.spoiler:hover, .spoiler:hover a {
+  background-color: white;
 }
-
-function wrapToHtmlElement(child: string | HTMLElement, type: ElementType) {
-  switch (type) {
-    case ElementType.Bold: return wrapTag("b", child)
-    case ElementType.Normal: return wrapTag("span", child)
-    case ElementType.Italic: return wrapTag("i", child)
-    case ElementType.Header: return wrapTag("h1", child)
-    case ElementType.UnderLine: return wrapTag("u", child)
-    case ElementType.Code: return wrapTag("tt", child)
-    case ElementType.Quote: return wrapTag("b", child, "quote")
-    case ElementType.Spoiler: return wrapTag("span", child, "spoiler")
-    case ElementType.HyperLink: return wrapTag("hyper-link", child)
-    case ElementType.Mention: return wrapTag("b", child, "mention")
-    case ElementType.HashTag: return wrapTag("b", child, "hashtag")
-    case ElementType.ImageLink: {
-      const img = document.createElement("img")
-      if (typeof child === "string")
-        img.src = child
-      return img
-    }
-    case ElementType.VideoLink: {
-      const vid = document.createElement("video")
-      if (typeof child === "string") {
-        vid.src = child
-      }
-    }
-    case ElementType.PlaceHolderLink: return aTag(typeof child === "string" ? child : "#")
-    case ElementType.CustomStyle:
-
-  }
-
-  if (typeof child === "string") {
-    return wrapTag("span", child)
-  } else {
-    return child
-  }
-}
-
-function convertToHTMLElement(element: Element): HTMLElement {
-  const type = element.elementType
-  const text = element.text
-
-  let child: HTMLElement | string = text
-  for (const _type of iterateTypes(type)) {
-    child = wrapToHtmlElement(child, _type)
-  }
+`
+new CSSStyleSheet().replace(style).then((ss) => {
+  document.adoptedStyleSheets.push(ss)
+}).catch(console.error)
 
 
-  if (typeof child === "string") {
-    return wrapTag("span", child)
-  } else {
-    return child
-  }
-}
+
 
 export class LupydMarkdown extends HTMLElement {
   readonly markdown: Markdown
-  constructor(markdown: Markdown) {
+  readonly convertToHtmlElement: (el: Element) => HTMLElement
+  constructor(markdown: Markdown, convertToHtmlElement: (el: Element) => HTMLElement) {
     super()
     this.markdown = markdown
+    this.convertToHtmlElement = convertToHtmlElement
   }
+
   connectedCallback() {
     this.render()
   }
 
   render() {
-    console.time(`Markdown render`)
-    const children = this.markdown.elements.map(convertToHTMLElement)
-    this.replaceChildren(...children)
-    console.timeEnd(`Markdown render`)
+    this.replaceChildren(...this.markdown.elements.map(this.convertToHtmlElement))
   }
 }
 
 
 customElements.define("lupyd-markdown", LupydMarkdown)
+
+
+
+export class HyperLinkElement extends HTMLElement {
+
+  constructor() {
+    super()
+    this.attachShadow({ mode: "open" })
+    addGlobalStyleSheetsToShadowRoot(this.shadowRoot!)
+  }
+
+  connectedCallback() {
+    this.render()
+  }
+
+  render() {
+    const innerText = this.innerHTML.length !== 0 ? this.innerHTML : this.innerText
+    if (innerText.length !== 0) {
+      let matchArray: RegExpExecArray | null
+      while ((matchArray = rawHyperLinkRegex.exec(innerText)) !== null) {
+        if (matchArray.length === 3) {
+          const url = matchArray[2]
+          const tag = matchArray[1]
+
+          let child: HTMLElement
+          switch (tag) {
+            case "image":
+              const img = document.createElement("img")
+              img.src = url
+              img.alt = tag
+              child = img
+              break
+            case "video":
+              const vid = document.createElement("video")
+              vid.controls = true
+              vid.src = url
+              child = vid
+              break
+            default:
+              const a = document.createElement("a")
+              a.innerText = tag
+              a.href = url
+              child = a
+
+          }
+          // this.replaceChildren(child)
+          this.shadowRoot!.replaceChildren(child)
+        }
+      }
+    }
+  }
+}
+
+customElements.define("hyper-link", HyperLinkElement)
+

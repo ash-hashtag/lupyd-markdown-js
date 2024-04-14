@@ -1,15 +1,15 @@
-import { Element, ElementType } from "./lupydMarkdown"
+import { Element, ElementType, LupydMarkdown, Markdown, WrapToHtmlElementFunction, iterateTypes, rawBoldRegex, rawCodeRegex, rawHashtagRegex, rawHeaderRegex, rawHyperLinkRegex, rawItalicRegex, rawMentionRegex, rawQuoteRegex, rawSpoilerRegex, rawSvgRegex, rawUnderlineRegex } from "./lupydMarkdown"
 
 
-const rawBoldRegex = /(?<!\\)\*\*\*(.*?)(?<!\\)\*\*\*/gm
-const rawItalicRegex = /(?<!\\)\/\/\/(.*?)(?<!\\)\/\/\//gm
-const rawUnderlineRegex = /(?<!\\)___(.*?)(?<!\\)___/gm
-const rawHeaderRegex = /(?<!\\)###(.*?)(?<!\\)###/gm
-const rawCodeRegex = /(?<!\\)```(.*?)(?<!\\)```/gm
-const rawHashtagRegex = /(?<!\\)#\w+/gm
-const rawMentionRegex = /(?<!\\)@\w+/gm
-const rawQuoteRegex = /^>\|\s.*$/gm
-const rawHyperLinkRegex = /\[(.+)\]\((.+)\)/gm
+// const rawBoldRegex = /(?<!\\)\*\*\*(.*?)(?<!\\)\*\*\*/gm
+// const rawItalicRegex = /(?<!\\)\/\/\/(.*?)(?<!\\)\/\/\//gm
+// const rawUnderlineRegex = /(?<!\\)___(.*?)(?<!\\)___/gm
+// const rawHeaderRegex = /(?<!\\)###(.*?)(?<!\\)###/gm
+// const rawCodeRegex = /(?<!\\)```(.*?)(?<!\\)```/gm
+// const rawHashtagRegex = /(?<!\\)#\w+/gm
+// const rawMentionRegex = /(?<!\\)@\w+/gm
+// const rawQuoteRegex = /^>\|\s.*$/gm
+// const rawHyperLinkRegex = /\[(.+)\]\((.+)\)/gm
 
 class Match {
   start: number
@@ -76,10 +76,90 @@ function defaultMatchers() {
   const usernameMatcher = new RegexPatternMatcher(rawMentionRegex, ElementType.Mention, singleDelimiter, false, true)
   const hyperLinkMatcher = new RegexPatternMatcher(rawHyperLinkRegex, ElementType.HyperLink, noDelimiter, false, true)
   const quoteMatcher = new RegexPatternMatcher(rawQuoteRegex, ElementType.Quote, tripleDelimiterBoth, true, true)
+  const svgMatcher = new RegexPatternMatcher(rawSvgRegex, ElementType.Svg, noDelimiter, false, true)
+  const spoilerMatcher = new RegexPatternMatcher(rawSpoilerRegex, ElementType.Spoiler, tripleDelimiterBoth, false, true)
   return [
-    boldMatcher, headerMatcher, hashtagMatcher, italicMatcher, usernameMatcher, hyperLinkMatcher, quoteMatcher, underlineMatcher,
+    boldMatcher, headerMatcher, 
+    spoilerMatcher,
+    hashtagMatcher, italicMatcher, usernameMatcher, hyperLinkMatcher, quoteMatcher, underlineMatcher,
     codeMatcher,
+    svgMatcher,
   ]
+}
+
+function wrapTag(tagName: string, child: string | HTMLElement, className?: string) {
+  const p = document.createElement(tagName)
+  if (typeof child === "string") {
+    p.innerText = child
+  } else {
+    p.append(child)
+  }
+
+  if (className)
+    p.classList.add(className)
+
+  return p
+}
+
+function aTag(href: string) {
+  const a = document.createElement("a")
+  a.href = href
+  return a
+}
+
+
+function convertToHTMLElement(element: Element, wrapToHtmlElement: WrapToHtmlElementFunction): HTMLElement {
+  const type = element.elementType
+  const text = element.text
+
+  let child: HTMLElement | string = text
+  for (const _type of iterateTypes(type)) {
+    child = wrapToHtmlElement(child, _type)
+  }
+
+  if (typeof child === "string") {
+    return wrapTag("span", child)
+  } else {
+    return child
+  }
+}
+
+export function defaultWrapToHtmlElement(child: string | HTMLElement, type: ElementType) {
+  switch (type) {
+    case ElementType.Bold: return wrapTag("b", child)
+    case ElementType.Normal: return wrapTag("span", child)
+    case ElementType.Italic: return wrapTag("i", child)
+    case ElementType.Header: return wrapTag("h1", child)
+    case ElementType.UnderLine: return wrapTag("u", child)
+    case ElementType.Code: return wrapTag("tt", child)
+    case ElementType.Quote: return wrapTag("b", child, "quote")
+    case ElementType.Spoiler: return wrapTag("span", child, "spoiler")
+    case ElementType.HyperLink: return wrapTag("hyper-link", child)
+    case ElementType.Mention: return wrapTag("b", child, "mention")
+    case ElementType.HashTag: return wrapTag("b", child, "hashtag")
+    case ElementType.ImageLink: {
+      const img = document.createElement("img")
+      if (typeof child === "string")
+        img.src = child
+      return img
+    }
+    case ElementType.VideoLink: {
+      const vid = document.createElement("video")
+      if (typeof child === "string") {
+        vid.src = child
+      }
+      return vid
+    }
+    case ElementType.PlaceHolderLink: return aTag(typeof child === "string" ? child : "#")
+    case ElementType.Svg: {
+      const div = document.createElement("div")
+      if (typeof child === "string")
+        div.innerHTML = child
+      else
+        div.append(child)
+      return div.firstElementChild as HTMLElement
+    }
+  }
 }
 
 
@@ -87,6 +167,9 @@ interface Tuple<U, V> {
   a: U,
   b: V
 }
+
+
+
 
 
 function _parseText2(inputPart: Element, patternMatchers: PatternMatcher[]): Element[] {
@@ -147,89 +230,26 @@ function _parseText2(inputPart: Element, patternMatchers: PatternMatcher[]): Ele
 
 }
 
-export const getGlobalStyleSheets = async () => {
-  return Promise.all(Array.from(document.styleSheets).map(x => {
-    const sheet = new CSSStyleSheet()
-    const cssText = Array.from(x.cssRules).map(e => e.cssText).join(' ')
-    return sheet.replace(cssText)
-  }))
+
+export function parseTextToMarkdown(text: string): Markdown {
+  const elements = _parseText2({ text, elementType: ElementType.Normal }, defaultMatchers())
+  return { elements }
 }
 
-export const addGlobalStyleSheetsToShadowRoot = async (shadowRoot: ShadowRoot) => {
-  const sheets = await getGlobalStyleSheets()
-  shadowRoot.adoptedStyleSheets.push(...sheets)
+
+export function parseTextToHtmlElement(text: string): HTMLElement {
+  return new LupydMarkdown(parseTextToMarkdown(text), (el) => convertToHTMLElement(el, defaultWrapToHtmlElement))
 }
 
-export class HyperLinkElement extends HTMLElement {
 
-  constructor() {
-    super()
-    this.attachShadow({ mode: "open" })
-    addGlobalStyleSheetsToShadowRoot(this.shadowRoot!)
-  }
-
-  connectedCallback() {
-    this.render()
-  }
-
-  render() {
-    const innerText = this.innerHTML.length !== 0 ? this.innerHTML : this.innerText
-    if (innerText.length !== 0) {
-      let matchArray: RegExpExecArray | null
-      while ((matchArray = rawHyperLinkRegex.exec(innerText)) !== null) {
-        if (matchArray.length === 3) {
-          const url = matchArray[2]
-          const tag = matchArray[1]
-
-          let child: HTMLElement
-          switch (tag) {
-            case "image":
-              const img = document.createElement("img")
-              img.src = url
-              img.alt = tag
-              child = img
-              break
-            case "video":
-              const vid = document.createElement("video")
-              vid.controls = true
-              vid.src = url
-              child = vid
-              break
-            default:
-              const a = document.createElement("a")
-              a.innerText = tag
-              a.href = url
-              child = a
-
-          }
-          // this.replaceChildren(child)
-          this.shadowRoot!.replaceChildren(child)
-        }
-      }
-    }
-  }
+const test = () => {
+  const inputTextArea = document.getElementById("input-text")! as HTMLTextAreaElement
+  const outputElement = document.getElementById("output-text")! as HTMLElement
+  inputTextArea.addEventListener("input", _ => {
+    const text = inputTextArea.value
+    outputElement.replaceChildren(parseTextToHtmlElement(text))
+  })
 }
 
-customElements.define("hyper-link", HyperLinkElement)
 
-// function parseTextToHtmlElement(text: string): HTMLElement {
-//   const elements = _parseText2({ text, elementType: ElementType.Normal }, defaultMatchers())
-//   const p = document.createElement("p")
-//   p.innerText = JSON.stringify(elements) + '\n'
-//   const elem = document.createElement("div")
-//   elem.append(p, new LupydMarkdown({ elements }))
-//   return elem
-// }
-
-
-// const test = () => {
-//   const inputTextArea = document.getElementById("input-text")! as HTMLTextAreaElement
-//   const outputElement = document.getElementById("output-text")! as HTMLElement
-//   inputTextArea.addEventListener("input", _ => {
-//     const text = inputTextArea.value
-//     outputElement.replaceChildren(parseTextToHtmlElement(text))
-//   })
-// }
-
-
-// test()
+test()
