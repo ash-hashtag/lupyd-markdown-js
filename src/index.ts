@@ -1,15 +1,4 @@
-import { Element, ElementType, LupydMarkdown, Markdown, WrapToHtmlElementFunction, iterateTypes, rawBoldRegex, rawCodeRegex, rawHashtagRegex, rawHeaderRegex, rawHyperLinkRegex, rawItalicRegex, rawMentionRegex, rawQuoteRegex, rawSpoilerRegex, rawSvgRegex, rawUnderlineRegex } from "./lupydMarkdown"
-
-
-// const rawBoldRegex = /(?<!\\)\*\*\*(.*?)(?<!\\)\*\*\*/gm
-// const rawItalicRegex = /(?<!\\)\/\/\/(.*?)(?<!\\)\/\/\//gm
-// const rawUnderlineRegex = /(?<!\\)___(.*?)(?<!\\)___/gm
-// const rawHeaderRegex = /(?<!\\)###(.*?)(?<!\\)###/gm
-// const rawCodeRegex = /(?<!\\)```(.*?)(?<!\\)```/gm
-// const rawHashtagRegex = /(?<!\\)#\w+/gm
-// const rawMentionRegex = /(?<!\\)@\w+/gm
-// const rawQuoteRegex = /^>\|\s.*$/gm
-// const rawHyperLinkRegex = /\[(.+)\]\((.+)\)/gm
+import { Element, ElementType, LupydMarkdown, Markdown, WrapToHtmlElementFunction, iterateTypes, rawBoldRegex, rawCodeRegex, rawHashtagRegex, rawHeaderRegex, rawHyperLinkRegex, rawItalicRegex, rawMentionRegex, rawQuoteRegex, rawSpoilerRegex, rawSvgRegex, rawUnderlineRegex, rawWordBoldRegex, rawWordHeaderRegex, rawWordItalicRegex, rawWordSpoilerRegex, rawWordUnderlineRegex } from "./lupydMarkdown"
 
 class Match {
   start: number
@@ -64,26 +53,33 @@ class RegexPatternMatcher extends PatternMatcher {
 }
 const tripleDelimiterBoth = (_: string) => _.substring(3, _.length - 3);
 const singleDelimiter = (_: string) => _.substring(1);
+const singleDelimiterBoth = (_: string) => _.substring(1, _.length - 1);
 const noDelimiter = (_: string) => _
 
 function defaultMatchers() {
   const boldMatcher = new RegexPatternMatcher(rawBoldRegex, ElementType.Bold, tripleDelimiterBoth, true, false)
   const headerMatcher = new RegexPatternMatcher(rawHeaderRegex, ElementType.Header, tripleDelimiterBoth, true, false)
-  const codeMatcher = new RegexPatternMatcher(rawCodeRegex, ElementType.Code, tripleDelimiterBoth, true, false)
   const italicMatcher = new RegexPatternMatcher(rawItalicRegex, ElementType.Italic, tripleDelimiterBoth, true, false)
   const underlineMatcher = new RegexPatternMatcher(rawUnderlineRegex, ElementType.UnderLine, tripleDelimiterBoth, true, false)
+  const boldWordMatcher = new RegexPatternMatcher(rawWordBoldRegex, ElementType.Bold, singleDelimiterBoth, true, false)
+  const headerWordMatcher = new RegexPatternMatcher(rawWordHeaderRegex, ElementType.Header, singleDelimiterBoth, true, false)
+  const italicWordMatcher = new RegexPatternMatcher(rawWordItalicRegex, ElementType.Italic, singleDelimiterBoth, true, false)
+  const underlineWordMatcher = new RegexPatternMatcher(rawWordUnderlineRegex, ElementType.UnderLine, singleDelimiterBoth, true, false)
+  const codeMatcher = new RegexPatternMatcher(rawCodeRegex, ElementType.Code, tripleDelimiterBoth, true, false)
   const hashtagMatcher = new RegexPatternMatcher(rawHashtagRegex, ElementType.HashTag, singleDelimiter, false, true)
   const usernameMatcher = new RegexPatternMatcher(rawMentionRegex, ElementType.Mention, singleDelimiter, false, true)
   const hyperLinkMatcher = new RegexPatternMatcher(rawHyperLinkRegex, ElementType.HyperLink, noDelimiter, false, true)
-  const quoteMatcher = new RegexPatternMatcher(rawQuoteRegex, ElementType.Quote, tripleDelimiterBoth, true, true)
+  const quoteMatcher = new RegexPatternMatcher(rawQuoteRegex, ElementType.Quote, noDelimiter, false, true)
   const svgMatcher = new RegexPatternMatcher(rawSvgRegex, ElementType.Svg, noDelimiter, false, true)
-  const spoilerMatcher = new RegexPatternMatcher(rawSpoilerRegex, ElementType.Spoiler, tripleDelimiterBoth, false, true)
+  const spoilerMatcher = new RegexPatternMatcher(rawSpoilerRegex, ElementType.Spoiler, tripleDelimiterBoth, true, true)
+  const spoilerWordMatcher = new RegexPatternMatcher(rawWordSpoilerRegex, ElementType.Spoiler, singleDelimiterBoth, true, true)
   return [
-    boldMatcher, headerMatcher, 
+    boldMatcher, headerMatcher,
     spoilerMatcher,
     hashtagMatcher, italicMatcher, usernameMatcher, hyperLinkMatcher, quoteMatcher, underlineMatcher,
     codeMatcher,
     svgMatcher,
+    boldWordMatcher, headerWordMatcher, italicWordMatcher, underlineWordMatcher, spoilerWordMatcher,
   ]
 }
 
@@ -99,12 +95,6 @@ function wrapTag(tagName: string, child: string | HTMLElement, className?: strin
     p.classList.add(className)
 
   return p
-}
-
-function aTag(href: string) {
-  const a = document.createElement("a")
-  a.href = href
-  return a
 }
 
 
@@ -150,7 +140,6 @@ export function defaultWrapToHtmlElement(child: string | HTMLElement, type: Elem
       }
       return vid
     }
-    case ElementType.PlaceHolderLink: return aTag(typeof child === "string" ? child : "#")
     case ElementType.Svg: {
       const div = document.createElement("div")
       if (typeof child === "string")
@@ -168,10 +157,20 @@ interface Tuple<U, V> {
   b: V
 }
 
+function replaceEveryOtherBackslash(inputString: string) {
+  let outputString = ""
+  let i = 0;
+  while (i < inputString.length) {
+    if (inputString.charAt(i) === '\\' && i + 1 < inputString.length) {
+      i += 1
+    }
+    outputString += inputString.charAt(i)
+    i += 1
+  }
 
 
-
-
+  return outputString
+}
 function _parseText2(inputPart: Element, patternMatchers: PatternMatcher[]): Element[] {
   const elements: Element[] = []
 
@@ -196,31 +195,37 @@ function _parseText2(inputPart: Element, patternMatchers: PatternMatcher[]): Ele
     }
 
     if (current < match.a.start) {
-      const result = _parseText2({
+      const el = {
         text: inputText.substring(current, match.a.start),
         elementType: currentTypes,
-      }, patternMatchers)
-      elements.push(...result)
+      }
+      if (el.text.length !== 0) {
+        const result = _parseText2(el, patternMatchers)
+        elements.push(...result)
+      }
     }
 
-    const matchTypes: ElementType = match.b.singleType ? match.b.matchType : currentTypes | match.b.matchType
+    const matchTypes: ElementType = match.b.singleType ? match.b.matchType : (currentTypes | match.b.matchType)
     const element: Element = {
       text: match.b.delimiter(inputText.substring(match.a.start, match.a.end)),
       elementType: matchTypes,
     }
+    if (element.text.length !== 0) {
 
-    if (match.b.lookInwards) {
-      const result = _parseText2(element, patternMatchers)
-      elements.push(...result)
-    } else {
-      elements.push(element)
+      if (match.b.lookInwards) {
+        const result = _parseText2(element, patternMatchers)
+        elements.push(...result)
+      } else {
+        elements.push(element)
+      }
     }
 
     current = match.a.end
   }
 
   if (current < inputText.length) {
-    const text = inputText.substring(current)
+    let text = inputText.substring(current)
+    text = replaceEveryOtherBackslash(text)
     elements.push({
       text, elementType: currentTypes
     })
@@ -252,4 +257,4 @@ const test = () => {
 }
 
 
-test()
+// test()

@@ -1,28 +1,22 @@
 (() => {
   // src/lupydMarkdown.ts
   var rawHyperLinkRegex = /\[(.+)\]\((.+)\)/gm;
-  var rawBoldRegex = /(?<!\\)\*\*\*(.*?)(?<!\\)\*\*\*/gm;
-  var rawItalicRegex = /(?<!\\)\/\/\/(.*?)(?<!\\)\/\/\//gm;
-  var rawUnderlineRegex = /(?<!\\)___(.*?)(?<!\\)___/gm;
-  var rawHeaderRegex = /(?<!\\)###(.*?)(?<!\\)###/gm;
-  var rawCodeRegex = /(?<!\\)```(.*?)(?<!\\)```/gm;
-  var rawSpoilerRegex = /(?<!\\)\|\|\|(.*?)(?<!\\)\|\|\|/gm;
+  var rawBoldRegex = /(?<!\\)\*\*\*([\s\S]*?)(?<!\\)\*\*\*/gm;
+  var rawItalicRegex = /(?<!\\)\/\/\/([\s\S]*?)(?<!\\)\/\/\//gm;
+  var rawUnderlineRegex = /(?<!\\)___([\s\S]*?)(?<!\\)___/gm;
+  var rawHeaderRegex = /(?<!\\)###([\s\S]*?)(?<!\\)###/gm;
+  var rawCodeRegex = /(?<!\\)```([\s\S]*?)(?<!\\)```/gm;
+  var rawSpoilerRegex = /(?<!\\)\|\|\|([\s\S]*?)(?<!\\)\|\|\|/gm;
   var rawHashtagRegex = /(?<!\\)#\w+/gm;
   var rawMentionRegex = /(?<!\\)@\w+/gm;
   var rawQuoteRegex = /^>\|\s.*$/gm;
   var rawSvgRegex = /(?<!\\)<svg\s*(?:\s+[^>]+)?>(?:(?!<\/svg>).)*?(?<!\\)<\/svg>/gm;
-  var getGlobalStyleSheets = async () => {
-    return Promise.all(Array.from(document.styleSheets).map((x) => {
-      const sheet = new CSSStyleSheet();
-      const cssText = Array.from(x.cssRules).map((e) => e.cssText).join(" ");
-      return sheet.replace(cssText);
-    }));
-  };
-  var addGlobalStyleSheetsToShadowRoot = async (shadowRoot) => {
-    const sheets = await getGlobalStyleSheets();
-    shadowRoot.adoptedStyleSheets.push(...sheets);
-  };
-  var MAX_ELEMENT_TYPE = 8192 /* Svg */;
+  var rawWordBoldRegex = /(?<!\\)\*(?!\s)([^\s]+)(?<!\\)\*/gm;
+  var rawWordItalicRegex = /(?<!\\)\/(?!\s)([^\s]+)(?<!\\)\//gm;
+  var rawWordUnderlineRegex = /(?<!\\)_(?!\s)([^\s]+)(?<!\\)_/gm;
+  var rawWordHeaderRegex = /(?<!\\)#(?!\s)([^\s]+)(?<!\\)#/gm;
+  var rawWordSpoilerRegex = /(?<!\\)\|(?!\s)([^\s]+)(?<!\\)\|/gm;
+  var MAX_ELEMENT_TYPE = 4096 /* Svg */;
   function hasType(type, checkType) {
     return (type & checkType) === checkType;
   }
@@ -37,19 +31,6 @@
     }
     return types;
   }
-  var style = `
-.spoiler, .spoiler a { 
-  color: black; 
-  background-color: black;
-}
-
-.spoiler:hover, .spoiler:hover a {
-  background-color: white;
-}
-`;
-  new CSSStyleSheet().replace(style).then((ss) => {
-    document.adoptedStyleSheets.push(ss);
-  }).catch(console.error);
   var LupydMarkdown = class extends HTMLElement {
     markdown;
     convertToHtmlElement;
@@ -70,7 +51,6 @@
     constructor() {
       super();
       this.attachShadow({ mode: "open" });
-      addGlobalStyleSheetsToShadowRoot(this.shadowRoot);
     }
     connectedCallback() {
       this.render();
@@ -161,19 +141,25 @@
   };
   var tripleDelimiterBoth = (_) => _.substring(3, _.length - 3);
   var singleDelimiter = (_) => _.substring(1);
+  var singleDelimiterBoth = (_) => _.substring(1, _.length - 1);
   var noDelimiter = (_) => _;
   function defaultMatchers() {
     const boldMatcher = new RegexPatternMatcher(rawBoldRegex, 1 /* Bold */, tripleDelimiterBoth, true, false);
     const headerMatcher = new RegexPatternMatcher(rawHeaderRegex, 4 /* Header */, tripleDelimiterBoth, true, false);
-    const codeMatcher = new RegexPatternMatcher(rawCodeRegex, 16 /* Code */, tripleDelimiterBoth, true, false);
     const italicMatcher = new RegexPatternMatcher(rawItalicRegex, 2 /* Italic */, tripleDelimiterBoth, true, false);
     const underlineMatcher = new RegexPatternMatcher(rawUnderlineRegex, 8 /* UnderLine */, tripleDelimiterBoth, true, false);
+    const boldWordMatcher = new RegexPatternMatcher(rawWordBoldRegex, 1 /* Bold */, singleDelimiterBoth, true, false);
+    const headerWordMatcher = new RegexPatternMatcher(rawWordHeaderRegex, 4 /* Header */, singleDelimiterBoth, true, false);
+    const italicWordMatcher = new RegexPatternMatcher(rawWordItalicRegex, 2 /* Italic */, singleDelimiterBoth, true, false);
+    const underlineWordMatcher = new RegexPatternMatcher(rawWordUnderlineRegex, 8 /* UnderLine */, singleDelimiterBoth, true, false);
+    const codeMatcher = new RegexPatternMatcher(rawCodeRegex, 16 /* Code */, tripleDelimiterBoth, true, false);
     const hashtagMatcher = new RegexPatternMatcher(rawHashtagRegex, 512 /* HashTag */, singleDelimiter, false, true);
     const usernameMatcher = new RegexPatternMatcher(rawMentionRegex, 256 /* Mention */, singleDelimiter, false, true);
     const hyperLinkMatcher = new RegexPatternMatcher(rawHyperLinkRegex, 128 /* HyperLink */, noDelimiter, false, true);
-    const quoteMatcher = new RegexPatternMatcher(rawQuoteRegex, 32 /* Quote */, tripleDelimiterBoth, true, true);
-    const svgMatcher = new RegexPatternMatcher(rawSvgRegex, 8192 /* Svg */, noDelimiter, false, true);
-    const spoilerMatcher = new RegexPatternMatcher(rawSpoilerRegex, 64 /* Spoiler */, tripleDelimiterBoth, false, true);
+    const quoteMatcher = new RegexPatternMatcher(rawQuoteRegex, 32 /* Quote */, noDelimiter, false, true);
+    const svgMatcher = new RegexPatternMatcher(rawSvgRegex, 4096 /* Svg */, noDelimiter, false, true);
+    const spoilerMatcher = new RegexPatternMatcher(rawSpoilerRegex, 64 /* Spoiler */, tripleDelimiterBoth, true, true);
+    const spoilerWordMatcher = new RegexPatternMatcher(rawWordSpoilerRegex, 64 /* Spoiler */, singleDelimiterBoth, true, true);
     return [
       boldMatcher,
       headerMatcher,
@@ -185,7 +171,12 @@
       quoteMatcher,
       underlineMatcher,
       codeMatcher,
-      svgMatcher
+      svgMatcher,
+      boldWordMatcher,
+      headerWordMatcher,
+      italicWordMatcher,
+      underlineWordMatcher,
+      spoilerWordMatcher
     ];
   }
   function wrapTag(tagName, child, className) {
@@ -198,11 +189,6 @@
     if (className)
       p.classList.add(className);
     return p;
-  }
-  function aTag(href) {
-    const a = document.createElement("a");
-    a.href = href;
-    return a;
   }
   function convertToHTMLElement(element, wrapToHtmlElement) {
     const type = element.elementType;
@@ -254,9 +240,7 @@
         }
         return vid;
       }
-      case 4096 /* PlaceHolderLink */:
-        return aTag(typeof child === "string" ? child : "#");
-      case 8192 /* Svg */: {
+      case 4096 /* Svg */: {
         const div = document.createElement("div");
         if (typeof child === "string")
           div.innerHTML = child;
@@ -265,6 +249,18 @@
         return div.firstElementChild;
       }
     }
+  }
+  function replaceEveryOtherBackslash(inputString) {
+    let outputString = "";
+    let i = 0;
+    while (i < inputString.length) {
+      if (inputString.charAt(i) === "\\" && i + 1 < inputString.length) {
+        i += 1;
+      }
+      outputString += inputString.charAt(i);
+      i += 1;
+    }
+    return outputString;
   }
   function _parseText2(inputPart, patternMatchers) {
     const elements = [];
@@ -284,27 +280,33 @@
         continue;
       }
       if (current < match.a.start) {
-        const result = _parseText2({
+        const el = {
           text: inputText.substring(current, match.a.start),
           elementType: currentTypes
-        }, patternMatchers);
-        elements.push(...result);
+        };
+        if (el.text.length !== 0) {
+          const result = _parseText2(el, patternMatchers);
+          elements.push(...result);
+        }
       }
       const matchTypes = match.b.singleType ? match.b.matchType : currentTypes | match.b.matchType;
       const element = {
         text: match.b.delimiter(inputText.substring(match.a.start, match.a.end)),
         elementType: matchTypes
       };
-      if (match.b.lookInwards) {
-        const result = _parseText2(element, patternMatchers);
-        elements.push(...result);
-      } else {
-        elements.push(element);
+      if (element.text.length !== 0) {
+        if (match.b.lookInwards) {
+          const result = _parseText2(element, patternMatchers);
+          elements.push(...result);
+        } else {
+          elements.push(element);
+        }
       }
       current = match.a.end;
     }
     if (current < inputText.length) {
-      const text = inputText.substring(current);
+      let text = inputText.substring(current);
+      text = replaceEveryOtherBackslash(text);
       elements.push({
         text,
         elementType: currentTypes

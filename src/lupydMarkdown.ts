@@ -1,28 +1,25 @@
 
 export const rawHyperLinkRegex = /\[(.+)\]\((.+)\)/gm
-export const rawBoldRegex = /(?<!\\)\*\*\*(.*?)(?<!\\)\*\*\*/gm
-export const rawItalicRegex = /(?<!\\)\/\/\/(.*?)(?<!\\)\/\/\//gm
-export const rawUnderlineRegex = /(?<!\\)___(.*?)(?<!\\)___/gm
-export const rawHeaderRegex = /(?<!\\)###(.*?)(?<!\\)###/gm
-export const rawCodeRegex = /(?<!\\)```(.*?)(?<!\\)```/gm
-export const rawSpoilerRegex = /(?<!\\)\|\|\|(.*?)(?<!\\)\|\|\|/gm
+
+export const rawBoldRegex = /(?<!\\)\*\*\*([\s\S]*?)(?<!\\)\*\*\*/gm
+export const rawItalicRegex = /(?<!\\)\/\/\/([\s\S]*?)(?<!\\)\/\/\//gm
+export const rawUnderlineRegex = /(?<!\\)___([\s\S]*?)(?<!\\)___/gm
+export const rawHeaderRegex = /(?<!\\)###([\s\S]*?)(?<!\\)###/gm
+export const rawCodeRegex = /(?<!\\)```([\s\S]*?)(?<!\\)```/gm
+export const rawSpoilerRegex = /(?<!\\)\|\|\|([\s\S]*?)(?<!\\)\|\|\|/gm
+
 export const rawHashtagRegex = /(?<!\\)#\w+/gm
 export const rawMentionRegex = /(?<!\\)@\w+/gm
 export const rawQuoteRegex = /^>\|\s.*$/gm
 export const rawSvgRegex = /(?<!\\)<svg\s*(?:\s+[^>]+)?>(?:(?!<\/svg>).)*?(?<!\\)<\/svg>/gm
 
-export const getGlobalStyleSheets = async () => {
-  return Promise.all(Array.from(document.styleSheets).map(x => {
-    const sheet = new CSSStyleSheet()
-    const cssText = Array.from(x.cssRules).map(e => e.cssText).join(' ')
-    return sheet.replace(cssText)
-  }))
-}
+export const rawWordBoldRegex = /(?<!\\)\*(?!\s)([^\s]+)(?<!\\)\*/gm
+export const rawWordItalicRegex = /(?<!\\)\/(?!\s)([^\s]+)(?<!\\)\//gm
+export const rawWordUnderlineRegex = /(?<!\\)_(?!\s)([^\s]+)(?<!\\)_/gm
+export const rawWordHeaderRegex = /(?<!\\)#(?!\s)([^\s]+)(?<!\\)#/gm
+export const rawWordSpoilerRegex = /(?<!\\)\|(?!\s)([^\s]+)(?<!\\)\|/gm
 
-export const addGlobalStyleSheetsToShadowRoot = async (shadowRoot: ShadowRoot) => {
-  const sheets = await getGlobalStyleSheets()
-  shadowRoot.adoptedStyleSheets.push(...sheets)
-}
+
 export enum ElementType {
   Normal = 0,
   Bold = 1,
@@ -37,8 +34,7 @@ export enum ElementType {
   HashTag = 512,
   ImageLink = 1024,
   VideoLink = 2048,
-  PlaceHolderLink = 4096,
-  Svg = 4096 * 2,
+  Svg = 4096,
 }
 
 const MAX_ELEMENT_TYPE = ElementType.Svg
@@ -73,19 +69,19 @@ export function iterateTypes(type: ElementType) {
 export type WrapToHtmlElementFunction = (_: string | HTMLElement, __: ElementType) => HTMLElement
 
 
-const style = `
-.spoiler, .spoiler a { 
-  color: black; 
-  background-color: black;
-}
+// const style = `
+// .spoiler, .spoiler a { 
+//   color: black; 
+//   background-color: black;
+// }
 
-.spoiler:hover, .spoiler:hover a {
-  background-color: white;
-}
-`
-new CSSStyleSheet().replace(style).then((ss) => {
-  document.adoptedStyleSheets.push(ss)
-}).catch(console.error)
+// .spoiler:hover, .spoiler:hover a {
+//   background-color: white;
+// }
+// `
+// new CSSStyleSheet().replace(style).then((ss) => {
+//   document.adoptedStyleSheets.push(ss)
+// }).catch(console.error)
 
 
 
@@ -111,14 +107,11 @@ export class LupydMarkdown extends HTMLElement {
 
 customElements.define("lupyd-markdown", LupydMarkdown)
 
-
-
 export class HyperLinkElement extends HTMLElement {
 
   constructor() {
     super()
     this.attachShadow({ mode: "open" })
-    addGlobalStyleSheetsToShadowRoot(this.shadowRoot!)
   }
 
   connectedCallback() {
