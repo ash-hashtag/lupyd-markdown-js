@@ -1,0 +1,19 @@
+
+# Lupyd Markdown
+
+An experimental and inefficient custom markdown format
+
+
+### Header    Sentences and multiline ###  #Header#
+*** BOLD      Sentences and multiline ***  *BOLD*
+/// Italic    Sentences and multiline ///  /Italic/
+``` Code      Sentences and multiline ```  `Code`
+___ Underline Sentences and multiline ___  _Underline_
+||| Spoiler Sentences and multiline |||  |spoiler|
+>| for quotes
+
+@mentions
+#hashtags
+
+
+[tag](url) for hyperlinks, supports [image], [video], or custom tags [myTag]

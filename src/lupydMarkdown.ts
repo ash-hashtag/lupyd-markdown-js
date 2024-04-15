@@ -1,5 +1,5 @@
 
-export const rawHyperLinkRegex = /\[(.+)\]\((.+)\)/gm
+export const rawHyperLinkRegex = /\[(\S+)\]\((\S+)\)/gm
 
 export const rawBoldRegex = /(?<!\\)\*\*\*([\s\S]*?)(?<!\\)\*\*\*/gm
 export const rawItalicRegex = /(?<!\\)\/\/\/([\s\S]*?)(?<!\\)\/\/\//gm
@@ -69,21 +69,6 @@ export function iterateTypes(type: ElementType) {
 export type WrapToHtmlElementFunction = (_: string | HTMLElement, __: ElementType) => HTMLElement
 
 
-// const style = `
-// .spoiler, .spoiler a { 
-//   color: black; 
-//   background-color: black;
-// }
-
-// .spoiler:hover, .spoiler:hover a {
-//   background-color: white;
-// }
-// `
-// new CSSStyleSheet().replace(style).then((ss) => {
-//   document.adoptedStyleSheets.push(ss)
-// }).catch(console.error)
-
-
 
 
 export class LupydMarkdown extends HTMLElement {
@@ -111,7 +96,6 @@ export class HyperLinkElement extends HTMLElement {
 
   constructor() {
     super()
-    this.attachShadow({ mode: "open" })
   }
 
   connectedCallback() {
@@ -119,40 +103,32 @@ export class HyperLinkElement extends HTMLElement {
   }
 
   render() {
-    const innerText = this.innerHTML.length !== 0 ? this.innerHTML : this.innerText
-    if (innerText.length !== 0) {
-      let matchArray: RegExpExecArray | null
-      while ((matchArray = rawHyperLinkRegex.exec(innerText)) !== null) {
-        if (matchArray.length === 3) {
-          const url = matchArray[2]
-          const tag = matchArray[1]
+    const tag = this.getAttribute("data-link-name")!
+    const url = this.getAttribute("data-link")!
 
-          let child: HTMLElement
-          switch (tag) {
-            case "image":
-              const img = document.createElement("img")
-              img.src = url
-              img.alt = tag
-              child = img
-              break
-            case "video":
-              const vid = document.createElement("video")
-              vid.controls = true
-              vid.src = url
-              child = vid
-              break
-            default:
-              const a = document.createElement("a")
-              a.innerText = tag
-              a.href = url
-              child = a
+    let child: HTMLElement
+    switch (tag) {
+      case "image":
+        const img = document.createElement("img")
+        img.src = url
+        img.alt = tag
+        child = img
+        break
+      case "video":
+        const vid = document.createElement("video")
+        vid.controls = true
+        vid.src = url
+        child = vid
+        break
+      default:
+        const a = document.createElement("a")
+        a.innerText = tag
+        a.href = url
+        child = a
 
-          }
-          // this.replaceChildren(child)
-          this.shadowRoot!.replaceChildren(child)
-        }
-      }
     }
+    // this.replaceChildren(child)
+    this.replaceChildren(child)
   }
 }
 

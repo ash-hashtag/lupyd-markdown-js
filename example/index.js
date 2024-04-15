@@ -1,6 +1,6 @@
 (() => {
   // src/lupydMarkdown.ts
-  var rawHyperLinkRegex = /\[(.+)\]\((.+)\)/gm;
+  var rawHyperLinkRegex = /\[(\S+)\]\((\S+)\)/gm;
   var rawBoldRegex = /(?<!\\)\*\*\*([\s\S]*?)(?<!\\)\*\*\*/gm;
   var rawItalicRegex = /(?<!\\)\/\/\/([\s\S]*?)(?<!\\)\/\/\//gm;
   var rawUnderlineRegex = /(?<!\\)___([\s\S]*?)(?<!\\)___/gm;
@@ -50,43 +50,34 @@
   var HyperLinkElement = class extends HTMLElement {
     constructor() {
       super();
-      this.attachShadow({ mode: "open" });
     }
     connectedCallback() {
       this.render();
     }
     render() {
-      const innerText = this.innerHTML.length !== 0 ? this.innerHTML : this.innerText;
-      if (innerText.length !== 0) {
-        let matchArray;
-        while ((matchArray = rawHyperLinkRegex.exec(innerText)) !== null) {
-          if (matchArray.length === 3) {
-            const url = matchArray[2];
-            const tag = matchArray[1];
-            let child;
-            switch (tag) {
-              case "image":
-                const img = document.createElement("img");
-                img.src = url;
-                img.alt = tag;
-                child = img;
-                break;
-              case "video":
-                const vid = document.createElement("video");
-                vid.controls = true;
-                vid.src = url;
-                child = vid;
-                break;
-              default:
-                const a = document.createElement("a");
-                a.innerText = tag;
-                a.href = url;
-                child = a;
-            }
-            this.shadowRoot.replaceChildren(child);
-          }
-        }
+      const tag = this.getAttribute("data-link-name");
+      const url = this.getAttribute("data-link");
+      let child;
+      switch (tag) {
+        case "image":
+          const img = document.createElement("img");
+          img.src = url;
+          img.alt = tag;
+          child = img;
+          break;
+        case "video":
+          const vid = document.createElement("video");
+          vid.controls = true;
+          vid.src = url;
+          child = vid;
+          break;
+        default:
+          const a = document.createElement("a");
+          a.innerText = tag;
+          a.href = url;
+          child = a;
       }
+      this.replaceChildren(child);
     }
   };
   customElements.define("hyper-link", HyperLinkElement);
@@ -221,8 +212,23 @@
         return wrapTag("b", child, "quote");
       case 64 /* Spoiler */:
         return wrapTag("span", child, "spoiler");
-      case 128 /* HyperLink */:
-        return wrapTag("hyper-link", child);
+      case 128 /* HyperLink */: {
+        const hyperLink = document.createElement("hyper-link");
+        let matchArray;
+        if (typeof child === "string") {
+          const regex = new RegExp(rawHyperLinkRegex);
+          console.log(`Hyper link ${child}`);
+          while ((matchArray = regex.exec(child)) !== null) {
+            if (matchArray.length === 3) {
+              const url = matchArray[2];
+              const tag = matchArray[1];
+              hyperLink.setAttribute("data-link", url);
+              hyperLink.setAttribute("data-link-name", tag);
+            }
+          }
+        }
+        return hyperLink;
+      }
       case 256 /* Mention */:
         return wrapTag("b", child, "mention");
       case 512 /* HashTag */:
@@ -251,10 +257,12 @@
     }
   }
   function replaceEveryOtherBackslash(inputString) {
+    const escapableCharacters = "*#@_|>`\\".split("");
     let outputString = "";
     let i = 0;
     while (i < inputString.length) {
-      if (inputString.charAt(i) === "\\" && i + 1 < inputString.length) {
+      if (inputString.charAt(i) === "\\" && i + 1 < inputString.length && escapableCharacters.find((x) => inputString.charAt(i + 1) == x)) {
+        console.log(`Escaping ${inputString.charAt(i)} @ ${i}`);
         i += 1;
       }
       outputString += inputString.charAt(i);
@@ -321,13 +329,10 @@
   function parseTextToHtmlElement(text) {
     return new LupydMarkdown(parseTextToMarkdown(text), (el) => convertToHTMLElement(el, defaultWrapToHtmlElement));
   }
-  var test = () => {
-    const inputTextArea = document.getElementById("input-text");
-    const outputElement = document.getElementById("output-text");
-    inputTextArea.addEventListener("input", (_) => {
-      const text = inputTextArea.value;
-      outputElement.replaceChildren(parseTextToHtmlElement(text));
-    });
-  };
-  test();
+    const inputTextArea = document.getElementById("input-text")  
+    const outputElement = document.getElementById("output-text")
+    inputTextArea.addEventListener("input", _ => {
+      const text = inputTextArea.value
+      outputElement.replaceChildren(parseTextToHtmlElement(text))
+    })
 })();

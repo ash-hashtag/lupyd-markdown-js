@@ -65,7 +65,7 @@ function defaultMatchers() {
   const headerWordMatcher = new RegexPatternMatcher(rawWordHeaderRegex, ElementType.Header, singleDelimiterBoth, true, false)
   const italicWordMatcher = new RegexPatternMatcher(rawWordItalicRegex, ElementType.Italic, singleDelimiterBoth, true, false)
   const underlineWordMatcher = new RegexPatternMatcher(rawWordUnderlineRegex, ElementType.UnderLine, singleDelimiterBoth, true, false)
-  const codeMatcher = new RegexPatternMatcher(rawCodeRegex, ElementType.Code, tripleDelimiterBoth, true, false)
+  const codeMatcher = new RegexPatternMatcher(rawCodeRegex, ElementType.Code, tripleDelimiterBoth, false, false)
   const hashtagMatcher = new RegexPatternMatcher(rawHashtagRegex, ElementType.HashTag, singleDelimiter, false, true)
   const usernameMatcher = new RegexPatternMatcher(rawMentionRegex, ElementType.Mention, singleDelimiter, false, true)
   const hyperLinkMatcher = new RegexPatternMatcher(rawHyperLinkRegex, ElementType.HyperLink, noDelimiter, false, true)
@@ -124,7 +124,25 @@ export function defaultWrapToHtmlElement(child: string | HTMLElement, type: Elem
     case ElementType.Code: return wrapTag("tt", child)
     case ElementType.Quote: return wrapTag("b", child, "quote")
     case ElementType.Spoiler: return wrapTag("span", child, "spoiler")
-    case ElementType.HyperLink: return wrapTag("hyper-link", child)
+    case ElementType.HyperLink: {
+      const hyperLink = document.createElement("hyper-link")
+
+      let matchArray: RegExpExecArray | null
+      if (typeof child === "string") {
+        const regex = new RegExp(rawHyperLinkRegex)
+        console.log(`Hyper link ${child}`)
+        while ((matchArray = regex.exec(child)) !== null) {
+          if (matchArray.length === 3) {
+            const url = matchArray[2]
+            const tag = matchArray[1]
+            hyperLink.setAttribute("data-link", url)
+            hyperLink.setAttribute("data-link-name", tag)
+          }
+        }
+      }
+
+      return hyperLink
+    }
     case ElementType.Mention: return wrapTag("b", child, "mention")
     case ElementType.HashTag: return wrapTag("b", child, "hashtag")
     case ElementType.ImageLink: {
@@ -158,10 +176,15 @@ interface Tuple<U, V> {
 }
 
 function replaceEveryOtherBackslash(inputString: string) {
+  const escapableCharacters = '*#@_|>`\\'.split('')
+
   let outputString = ""
   let i = 0;
   while (i < inputString.length) {
-    if (inputString.charAt(i) === '\\' && i + 1 < inputString.length) {
+    if (inputString.charAt(i) === '\\'
+      && i + 1 < inputString.length
+      && escapableCharacters.find(x => inputString.charAt(i + 1) == x)) {
+      console.log(`Escaping ${inputString.charAt(i)} @ ${i}`)
       i += 1
     }
     outputString += inputString.charAt(i)
@@ -246,15 +269,3 @@ export function parseTextToHtmlElement(text: string): HTMLElement {
   return new LupydMarkdown(parseTextToMarkdown(text), (el) => convertToHTMLElement(el, defaultWrapToHtmlElement))
 }
 
-
-const test = () => {
-  const inputTextArea = document.getElementById("input-text")! as HTMLTextAreaElement
-  const outputElement = document.getElementById("output-text")! as HTMLElement
-  inputTextArea.addEventListener("input", _ => {
-    const text = inputTextArea.value
-    outputElement.replaceChildren(parseTextToHtmlElement(text))
-  })
-}
-
-
-// test()
