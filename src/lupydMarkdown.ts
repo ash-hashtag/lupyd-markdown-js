@@ -32,9 +32,7 @@ export enum ElementType {
   HyperLink = 128,
   Mention = 256,
   HashTag = 512,
-  ImageLink = 1024,
-  VideoLink = 2048,
-  Svg = 4096,
+  Svg = 1024,
 }
 
 const MAX_ELEMENT_TYPE = ElementType.Svg

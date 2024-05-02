@@ -145,19 +145,6 @@ export function defaultWrapToHtmlElement(child: string | HTMLElement, type: Elem
     }
     case ElementType.Mention: return wrapTag("b", child, "mention")
     case ElementType.HashTag: return wrapTag("b", child, "hashtag")
-    case ElementType.ImageLink: {
-      const img = document.createElement("img")
-      if (typeof child === "string")
-        img.src = child
-      return img
-    }
-    case ElementType.VideoLink: {
-      const vid = document.createElement("video")
-      if (typeof child === "string") {
-        vid.src = child
-      }
-      return vid
-    }
     case ElementType.Svg: {
       const div = document.createElement("div")
       if (typeof child === "string")
